@@ -20,7 +20,7 @@ internal enum ProjectsRoot
 /// project pages; reservation, publishing and management actions are not rendered until they exist natively.
 /// The Commit history page is a second instance whose first screen is the personal history (`history`).
 /// </summary>
-internal sealed partial class ProjectsView : UserControl
+internal sealed partial class ProjectsView : UserControl, IScreenStack
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromSeconds(60);
 

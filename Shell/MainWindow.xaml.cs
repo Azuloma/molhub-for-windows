@@ -16,7 +16,8 @@ namespace FusionLedger.Windows;
 
 public sealed partial class MainWindow : Window
 {
-    private readonly AuthenticatedUser _user;
+    // Replaced (status, role, project manager) when a pending account is found approved.
+    private AuthenticatedUser _user;
     private readonly ResourceLoader _strings = ResourceLoader.GetForViewIndependentUse();
     private readonly ObservableCollection<string> _searchSuggestions = [];
     private readonly Stack<NativePage> _history = new();
@@ -25,6 +26,8 @@ public sealed partial class MainWindow : Window
     private DashboardView? _dashboard;
     private ProjectsView? _projects;
     private ProjectsView? _commitHistory;
+    private ApprovalView? _approval;
+    private MaintenanceView? _maintenance;
     private string _bridgeStatusKey = "BridgeConnecting";
     private TextBlock? _bridgeStatusText;
     private bool _signingOut;
@@ -155,8 +158,7 @@ public sealed partial class MainWindow : Window
         NotificationsHeader.Text = L("Notifications");
         NotificationsEmpty.Text = L("NotConnected");
         AccountName.Text = _user.Username;
-        AccountStatus.Text = string.Format(L("AccountStatusFormat"), LocalizedValue("Status", _user.Status));
-        AccountRole.Text = string.Format(L("AccountRoleFormat"), LocalizedValue("Role", _user.Role));
+        UpdateAccountStatusText();
         foreach (var item in Navigation.MenuItems.OfType<NavigationViewItem>().Concat(Navigation.FooterMenuItems.OfType<NavigationViewItem>()))
         {
             if (TryParsePage(item.Tag as string, out var page)) item.Content = L("Page_" + NativePageCatalog.SearchKey(page));
@@ -169,13 +171,19 @@ public sealed partial class MainWindow : Window
         AutomationProperties.SetName(SignOutButton, L("SignOut"));
     }
 
+    private void UpdateAccountStatusText()
+    {
+        AccountStatus.Text = string.Format(L("AccountStatusFormat"), LocalizedValue("Status", _user.Status));
+        AccountRole.Text = string.Format(L("AccountRoleFormat"), LocalizedValue("Role", _user.Role));
+    }
+
     private void RootGrid_Loaded(object sender, RoutedEventArgs e)
     {
         ApplySearchWidth(RootGrid.ActualWidth);
         if (_initialNavigationCompleted) return;
         // Let NavigationView finish its initial selection/layout before showing the first page.
         _initialNavigationCompleted = true;
-        NavigateTo(NativePage.Dashboard, false);
+        NavigateTo(NativePageCatalog.StartPage(_user), false);
         _ = ConnectBridgeAsync();
     }
 
@@ -192,10 +200,7 @@ public sealed partial class MainWindow : Window
 
     private void ConfigureProfile()
     {
-        AdministrationButton.Visibility = NativePageCatalog.CanOpenMaintenance(_user)
-            ? Visibility.Visible : Visibility.Collapsed;
-        MaintenanceItem.Visibility = NativePageCatalog.CanOpenMaintenance(_user)
-            ? Visibility.Visible : Visibility.Collapsed;
+        ApplyPageAccess();
         ProfilePicture.DisplayName = _user.Username;
         AccountPicture.DisplayName = _user.Username;
         if (_user.AvatarPng is { Length: > 0 } avatar)
@@ -204,6 +209,44 @@ public sealed partial class MainWindow : Window
             AvatarImage.Attach(ProfilePicture, avatar, 64);
             AvatarImage.Attach(AccountPicture, avatar, 96);
         }
+    }
+
+    /// <summary>
+    /// Shows the pane items and account rows this account may open (pending accounts: approval screen and
+    /// Server maintenance; approved: the workspace; admin: administration).
+    /// </summary>
+    private void ApplyPageAccess()
+    {
+        foreach (var item in Navigation.MenuItems.OfType<NavigationViewItem>().Concat(Navigation.FooterMenuItems.OfType<NavigationViewItem>()))
+        {
+            if (TryParsePage(item.Tag as string, out var page))
+                item.Visibility = NativePageCatalog.IsAvailable(page, _user) ? Visibility.Visible : Visibility.Collapsed;
+        }
+        AdministrationButton.Visibility = NativePageCatalog.IsAvailable(NativePage.Administration, _user)
+            ? Visibility.Visible : Visibility.Collapsed;
+        ProfileSettingsButton.Visibility = NativePageCatalog.IsAvailable(NativePage.ProfileSettings, _user)
+            ? Visibility.Visible : Visibility.Collapsed;
+        AccountSeparator.Visibility = ProfileSettingsButton.Visibility == Visibility.Visible || AdministrationButton.Visibility == Visibility.Visible
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>A newer session read of the same account (for example pending → rejected) updates the menu and pane.</summary>
+    private void UpdateUser(AuthenticatedUser user)
+    {
+        _user = user;
+        UpdateAccountStatusText();
+        ApplyPageAccess();
+    }
+
+    /// <summary>The approval screen found the same account approved: open the workspace without a new sign-in.</summary>
+    private void OnApproved(AuthenticatedUser user)
+    {
+        // A reply that arrives after Sign out must not open the workspace in the closing window.
+        if (_signingOut) return;
+        UpdateUser(user);
+        _approval = null;
+        _history.Clear();
+        NavigateTo(NativePage.Dashboard, false);
     }
 
     private void ConfigureAccelerators()
@@ -254,6 +297,7 @@ public sealed partial class MainWindow : Window
 
     private void NavigateTo(NativePage page, bool remember = true)
     {
+        if (!NativePageCatalog.IsAvailable(page, _user)) return;
         if (remember && page != _currentPage) _history.Push(_currentPage);
         _currentPage = page;
         ContentFrame.Content = CreatePlaceholder(page);
@@ -261,15 +305,16 @@ public sealed partial class MainWindow : Window
         SyncNavigationSelection(page);
     }
 
-    /// <summary>The page's own screen stack (Projects or Commit history), which Back walks first.</summary>
-    private ProjectsView? CurrentStackPage => _currentPage switch
+    /// <summary>The page's own screen stack (Projects, Commit history or Server maintenance), which Back walks first.</summary>
+    private IScreenStack? CurrentStackPage => _currentPage switch
     {
         NativePage.Projects => _projects,
         NativePage.CommitHistory => _commitHistory,
+        NativePage.ServerMaintenance => _maintenance,
         _ => null
     };
 
-    /// <summary>Back is shown for nested pages and for a project or commit opened inside Projects or Commit history.</summary>
+    /// <summary>Back is shown for nested pages and for an item opened inside a page's own screen stack.</summary>
     private void UpdateBackButton()
     {
         var stackNested = CurrentStackPage?.CanGoBack == true;
@@ -290,6 +335,8 @@ public sealed partial class MainWindow : Window
         if (page == NativePage.Dashboard) return CreateDashboardPage();
         if (page == NativePage.Projects) return CreateProjectsPage();
         if (page == NativePage.CommitHistory) return CreateCommitHistoryPage();
+        if (page == NativePage.AwaitingApproval) return CreateApprovalPage();
+        if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();
         if (page == NativePage.AppSettings) return CreateSettingsPage();
         if (page == NativePage.VersionInfo) return CreateVersionInfoPage();
 
@@ -329,6 +376,29 @@ public sealed partial class MainWindow : Window
             ProjectsRoot.History);
         _ = _commitHistory.EnsureLoadedAsync();
         return _commitHistory;
+    }
+
+    private FrameworkElement CreateApprovalPage()
+    {
+        _approval ??= new ApprovalView(L, _user,
+            () => _bridge.RequestAsync("session"),
+            OnApproved,
+            UpdateUser,
+            // The web's "Announcements" button; the announcements live on the Server maintenance page.
+            () => NavigateTo(NativePage.ServerMaintenance),
+            () => _ = SignOutAsync());
+        return _approval;
+    }
+
+    private FrameworkElement CreateMaintenancePage()
+    {
+        _maintenance ??= new MaintenanceView(L, ReadLanguage(),
+            (command, payload) => _bridge.RequestAsync(command, payload),
+            () => _user,
+            () => _ = SignOutAsync(),
+            UpdateBackButton);
+        _ = _maintenance.EnsureLoadedAsync();
+        return _maintenance;
     }
 
     /// <summary>Opens a project overview from another page (the list stays underneath for Back).</summary>
@@ -485,23 +555,22 @@ public sealed partial class MainWindow : Window
         _settingsInfoBar.IsOpen = true;
     }
 
+    /// <summary>
+    /// Selects the page's pane item; a page without a visible item (account-menu and title-bar pages) clears the
+    /// selection, so clicking the previous page in the pane still navigates back to it.
+    /// </summary>
     private void SyncNavigationSelection(NativePage page)
     {
-        foreach (var item in Navigation.MenuItems.OfType<NavigationViewItem>().Concat(Navigation.FooterMenuItems.OfType<NavigationViewItem>()))
+        var match = Navigation.MenuItems.OfType<NavigationViewItem>().Concat(Navigation.FooterMenuItems.OfType<NavigationViewItem>())
+            .FirstOrDefault(item => item.Visibility == Visibility.Visible && TryParsePage(item.Tag as string, out var itemPage) && itemPage == page);
+        _syncingNavigationSelection = true;
+        try
         {
-            if (TryParsePage(item.Tag as string, out var itemPage) && itemPage == page)
-            {
-                _syncingNavigationSelection = true;
-                try
-                {
-                    Navigation.SelectedItem = item;
-                }
-                finally
-                {
-                    _syncingNavigationSelection = false;
-                }
-                return;
-            }
+            Navigation.SelectedItem = match;
+        }
+        finally
+        {
+            _syncingNavigationSelection = false;
         }
     }
 
@@ -526,17 +595,17 @@ public sealed partial class MainWindow : Window
     private void PageSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
         var query = args.ChosenSuggestion as string ?? sender.Text.Trim();
-        var page = Enum.GetValues<NativePage>().FirstOrDefault(candidate =>
+        // Nullable, so "no available match" is not mistaken for the first enum value (Dashboard).
+        var page = Enum.GetValues<NativePage>().Cast<NativePage?>().FirstOrDefault(candidate =>
         {
-            if (!IsPageAvailable(candidate)) return false;
-            var key = NativePageCatalog.SearchKey(candidate);
+            if (candidate is not { } value || !IsPageAvailable(value)) return false;
+            var key = NativePageCatalog.SearchKey(value);
             return key.Equals(query, StringComparison.CurrentCultureIgnoreCase)
                 || LocalizedValue("Page", key).Equals(query, StringComparison.CurrentCultureIgnoreCase);
         });
-        if (NativePageCatalog.SearchKey(page).Equals(query, StringComparison.CurrentCultureIgnoreCase)
-            || LocalizedValue("Page", NativePageCatalog.SearchKey(page)).Equals(query, StringComparison.CurrentCultureIgnoreCase))
+        if (page is { } match)
         {
-            NavigateTo(page);
+            NavigateTo(match);
             sender.Text = string.Empty;
         }
     }
@@ -589,7 +658,7 @@ public sealed partial class MainWindow : Window
         public int Y;
     }
     private void ProfileSettings_Click(object sender, RoutedEventArgs e) { AccountFlyout.Hide(); NavigateTo(NativePage.ProfileSettings); }
-    private void Administration_Click(object sender, RoutedEventArgs e) { AccountFlyout.Hide(); if (NativePageCatalog.CanOpenMaintenance(_user)) NavigateTo(NativePage.Administration); }
+    private void Administration_Click(object sender, RoutedEventArgs e) { AccountFlyout.Hide(); if (NativePageCatalog.CanAdminister(_user)) NavigateTo(NativePage.Administration); }
     private async void SignOut_Click(object sender, RoutedEventArgs e)
     {
         AccountFlyout.Hide();
@@ -612,9 +681,7 @@ public sealed partial class MainWindow : Window
         return string.IsNullOrEmpty(localized) ? value : localized;
     }
 
-    private bool IsPageAvailable(NativePage page) =>
-        page is not (NativePage.ServerMaintenance or NativePage.Administration)
-        || NativePageCatalog.CanOpenMaintenance(_user);
+    private bool IsPageAvailable(NativePage page) => NativePageCatalog.IsAvailable(page, _user);
 
     private static bool TryParsePage(string? tag, out NativePage page) =>
         Enum.TryParse(tag, ignoreCase: false, out page);

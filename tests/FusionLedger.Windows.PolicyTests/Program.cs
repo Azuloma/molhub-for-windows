@@ -126,7 +126,7 @@ Assert(versionCode.Contains("RuntimeInformation.ProcessArchitecture", StringComp
     && versionCode.Contains("GetAvailableBrowserVersionString", StringComparison.Ordinal)
     && versionCode.Contains("WindowsAppSdkVersion", StringComparison.Ordinal)
     && !versionCode.Contains("typeof(Microsoft.UI.Xaml.Application).Assembly.GetName().Version", StringComparison.Ordinal)
-    && !versionCode.Contains("0.10.0", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
+    && !versionCode.Contains("0.11.1", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
 Assert(loginXaml.Contains("WebView2", StringComparison.Ordinal) && loginCode.Contains("CoreWebView2", StringComparison.Ordinal), "Only LoginWindow may host WebView2.");
 Assert(loginXaml.Contains("x:Name=\"RootGrid\"", StringComparison.Ordinal)
     && loginCode.Contains("ThemeService.ReadSavedPreference", StringComparison.Ordinal)
@@ -163,10 +163,10 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.10.0</Version>", StringComparison.Ordinal), "Version source of truth must be v0.10.0.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.10.0.0\"", StringComparison.Ordinal), "Manifest version must be v0.10.0.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.10.0", StringComparison.Ordinal)
-    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.10.0", StringComparison.Ordinal), "Version documentation must be updated.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.11.1</Version>", StringComparison.Ordinal), "Version source of truth must be v0.11.1.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.11.1.0\"", StringComparison.Ordinal), "Manifest version must be v0.11.1.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.11.1", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.11.1", StringComparison.Ordinal), "Version documentation must be updated.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -486,4 +486,98 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
     foreach (var key in historyKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing history string {key} in {locale}");
 }
 
-Console.WriteLine("v0.10.0 native shell, dashboard, commit history, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+// ----- Approval-waiting screen and page access -----
+var pendingUser = new AuthenticatedUser("newbie", null, "pending", "member", false);
+var approvedMember = pendingUser with { Status = "approved" };
+var approvedAdmin = approvedMember with { Role = "admin" };
+Assert(NativePageCatalog.StartPage(pendingUser) == NativePage.AwaitingApproval && NativePageCatalog.StartPage(approvedMember) == NativePage.Dashboard,
+    "A pending account must start on the approval screen, an approved one on the Dashboard.");
+Assert(new[] { NativePage.AwaitingApproval, NativePage.ServerMaintenance, NativePage.AppSettings, NativePage.VersionInfo }.All(p => NativePageCatalog.IsAvailable(p, pendingUser))
+    && new[] { NativePage.Dashboard, NativePage.Projects, NativePage.CommitHistory, NativePage.ProfileSettings, NativePage.Administration }.All(p => !NativePageCatalog.IsAvailable(p, pendingUser)),
+    "A pending account may open only the approval screen, Server maintenance (announcements), App settings and Version info (like the web).");
+Assert(!NativePageCatalog.IsAvailable(NativePage.AwaitingApproval, approvedMember) && NativePageCatalog.IsAvailable(NativePage.Dashboard, approvedMember)
+    && NativePageCatalog.IsAvailable(NativePage.ServerMaintenance, approvedMember)
+    && !NativePageCatalog.IsAvailable(NativePage.Administration, approvedMember) && NativePageCatalog.IsAvailable(NativePage.Administration, approvedAdmin)
+    && !NativePageCatalog.IsAvailable(NativePage.Administration, approvedAdmin with { Status = "pending" })
+    && !NativePageCatalog.IsNested(NativePage.ServerMaintenance) && NativePageCatalog.IsNested(NativePage.Administration),
+    "Approved accounts get the workspace and Server maintenance; administration stays admin-only and requires approval.");
+BridgeResult Session(string json) => new("r", 200, true, Json(json), null, null, null, false, BridgeOutcome.None);
+var approvedCheck = ApprovalModel.Check(Session("""{"user":{"id":"u9","username":"Newbie","status":"approved","role":"member","avatar":null,"projectManager":true},"maintenance":false}"""), pendingUser);
+Assert(approvedCheck.Check == ApprovalCheck.Approved && approvedCheck.User is { Status: "approved", Role: "member", ProjectManager: true, Username: "newbie" },
+    "Refresh must switch to the workspace when the same account is approved (camelCase projectManager from /api/v1/session).");
+Assert(ApprovalModel.Check(Session("""{"user":{"username":"newbie","status":"pending","role":"member","projectManager":false}}"""), pendingUser) is { Check: ApprovalCheck.StillWaiting, User.Status: "pending" }
+    && ApprovalModel.Check(Session("""{"user":null}"""), pendingUser).Check == ApprovalCheck.SessionEnded
+    && ApprovalModel.Check(Session("""{"user":{"username":"someone-else","status":"approved","role":"member"}}"""), pendingUser).Check == ApprovalCheck.SessionEnded
+    && ApprovalModel.Check(Session("""{"user":{"username":"newbie","status":"approved","role":"owner"}}"""), pendingUser).Check == ApprovalCheck.Unexpected
+    && ApprovalModel.Check(Session("""{"nothing":true}"""), pendingUser).Check == ApprovalCheck.Unexpected,
+    "Still pending stays on the screen; a missing or different user is an ended session; unknown shapes never approve.");
+Assert(ApprovalModel.Check(new BridgeResult("r", 401, false, null, null, "UNAUTHORIZED", null, false, BridgeOutcome.None), pendingUser).Check == ApprovalCheck.SessionEnded
+    && ApprovalModel.Check(BridgeResult.HostFailure("r", "BRIDGE_UNAVAILABLE", true, BridgeOutcome.None), pendingUser).Check == ApprovalCheck.Connection
+    && ApprovalModel.Check(new BridgeResult("r", 429, false, null, null, "RATE_LIMIT", null, true, BridgeOutcome.None), pendingUser).Check == ApprovalCheck.RateLimited,
+    "Approval check failures must map to session, connection and rate-limit states.");
+
+// ----- Server maintenance: state + announcements (read-only; readable by pending accounts) -----
+Assert(MaintenanceModel.ParseState(Json("""{"active":true,"startedAt":"2026-09-27T01:00:00.000Z","available":true}""")) is { Active: true, Available: true, StartedAt: not null }
+    && MaintenanceModel.ParseState(Json("""{"active":false,"startedAt":null,"available":false}""")) is { Active: false, Available: false, StartedAt: null }
+    && MaintenanceModel.ParseState(Json("""{"active":"yes","available":true}""")) is null && MaintenanceModel.ParseState(Json("""{"active":false}""")) is null
+    && MaintenanceModel.ParseState(Json("[]")) is null,
+    "The maintenance state must come only from boolean server fields.");
+Assert(MaintenanceModel.ShowsLockNote(approvedMember) && MaintenanceModel.ShowsLockNote(pendingUser) && !MaintenanceModel.ShowsLockNote(approvedAdmin)
+    && !MaintenanceModel.ShowsLockNote(pendingUser with { Status = "rejected" }) && !MaintenanceModel.ShowsLockNote(pendingUser with { Status = "suspended" }),
+    "The member lock note (announcements stay readable) is only for accounts that can read announcements, never for admins.");
+var announcementPage = MaintenanceModel.ParseList(Json("""
+[{"id":"a1","title":"Maintenance finished","version":"v0.19.0","details":"Line one\n\n  Line two","startedAt":"2026-09-20T10:00:00.000Z","endedAt":"2026-09-20T11:00:00.000Z","createdAt":"2026-09-20T11:00:01.000Z"},
+ {"id":"a2","title":"No end","version":"","details":"","startedAt":null,"endedAt":null,"createdAt":"2026-09-18T09:00:00.000Z"},
+ {"id":"bad id","title":"dropped"},{"id":"a4","title":""}]
+"""), Json("""{"limit":30,"offset":0,"nextOffset":null,"total":2}"""));
+Assert(announcementPage is { Items.Count: 2, Total: 2, NextOffset: null } && announcementPage.Items[0].Details == "Line one\n\n  Line two"
+    && announcementPage.Items[0].DisplayDate == DateTimeOffset.Parse("2026-09-20T11:00:00Z") && announcementPage.Items[1].DisplayDate == DateTimeOffset.Parse("2026-09-18T09:00:00Z"),
+    "Announcements must parse the server list, drop invalid rows and date by the maintenance end (creation as fallback).");
+Assert(MaintenanceModel.ParseList(Json("{}"), null) is null && MaintenanceModel.ParseList(Json("[]"), null) is { Items.Count: 0, NextOffset: null },
+    "Unexpected announcement shapes must not render; an empty list is valid.");
+Assert(MaintenanceModel.Preview("- One\r\n- Two  \n\n\n\nEnd", 120) == "- One\n- Two\n\nEnd" && MaintenanceModel.Preview(new string('x', 130), 120) == new string('x', 120) + "…",
+    "List previews keep the details' line breaks like the web (blank-line runs reduced) and cut with an ellipsis.");
+var announcementPayload = MaintenanceModel.ListPayload(30);
+Assert(announcementPayload.Count == 2 && announcementPayload["limit"]!.GetValue<int>() == MaintenanceModel.PageSize && announcementPayload["offset"]!.GetValue<int>() == 30
+    && MaintenanceModel.ListPayload(99999)["offset"]!.GetValue<int>() == 5000,
+    "Announcements send only limit/offset within the server bounds.");
+Assert(MaintenanceModel.ErrorFor(new BridgeResult("r", 403, false, null, null, "NOT_APPROVED", null, false, BridgeOutcome.None)) == MaintenanceError.NotApproved
+    && MaintenanceModel.ErrorFor(new BridgeResult("r", 401, false, null, null, "UNAUTHORIZED", null, false, BridgeOutcome.None)) == MaintenanceError.SessionEnded
+    && MaintenanceModel.ErrorFor(BridgeResult.HostFailure("r", "BRIDGE_TIMEOUT", true, BridgeOutcome.None)) == MaintenanceError.Connection,
+    "Maintenance page errors must map to the page states.");
+Assert(new[] { "announcements", "maintenance", "session" }.All(c => BridgePolicy.IsKnownCommand(c) && !BridgePolicy.IsWrite(c)),
+    "The approval screen and Server maintenance must use only read commands.");
+var announcementsCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Maintenance", "MaintenanceView.cs"));
+var approvalCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Approval", "ApprovalView.cs"));
+Assert(mainCode.Contains("NavigateTo(NativePageCatalog.StartPage(_user), false);", StringComparison.Ordinal)
+    && mainCode.Contains("if (!NativePageCatalog.IsAvailable(page, _user)) return;", StringComparison.Ordinal)
+    && mainCode.Contains("NativePage.ServerMaintenance => _maintenance", StringComparison.Ordinal)
+    && mainCode.Contains("if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();", StringComparison.Ordinal)
+    && mainCode.Contains("_bridge.RequestAsync(\"session\")", StringComparison.Ordinal)
+    && mainCode.Contains("NotificationsEmpty.Text = L(\"NotConnected\");", StringComparison.Ordinal)
+    && mainCode.Contains("NotificationsHeader.Text = L(\"Notifications\");", StringComparison.Ordinal)
+    && !mainCode.Contains("AnnouncementMenu", StringComparison.Ordinal) && !mainXaml.Contains("Announcement", StringComparison.Ordinal)
+    && mainCode.Contains("Navigation.SelectedItem = match;", StringComparison.Ordinal)
+    && mainCode.Contains("Cast<NativePage?>()", StringComparison.Ordinal)
+    && mainCode[mainCode.IndexOf("private void OnApproved", StringComparison.Ordinal)..].Contains("if (_signingOut) return;", StringComparison.Ordinal),
+    "MainWindow must start on the account's start page, refuse unavailable pages (also from search), keep the bell for notifications (not connected), host announcements on Server maintenance and ignore a late approval during sign-out.");
+Assert(approvalCode.Contains("ApprovalModel.Check(", StringComparison.Ordinal) && approvalCode.Contains("\"Pending_Heading\"", StringComparison.Ordinal)
+    && announcementsCode.Contains("\"announcements\"", StringComparison.Ordinal) && announcementsCode.Contains("\"maintenance\"", StringComparison.Ordinal)
+    && !announcementsCode.Contains("startMaintenance", StringComparison.Ordinal) && !announcementsCode.Contains("endMaintenance", StringComparison.Ordinal)
+    && !announcementsCode.Contains("Write", StringComparison.Ordinal) && !approvalCode.Contains("Write", StringComparison.Ordinal),
+    "The approval screen and Server maintenance must stay read-only (no start/complete maintenance controls).");
+foreach (var source in new[] { announcementsCode, approvalCode })
+{
+    Assert(!System.Text.RegularExpressions.Regex.IsMatch(source, "[\uE000-\uF8FF]") && !source.Contains("GLYPH_", StringComparison.Ordinal),
+        "New glyphs must be written as \\u escapes.");
+}
+var accessKeys = System.Text.RegularExpressions.Regex.Matches(announcementsCode + approvalCode + mainCode, "\"((?:Pending|Announcements|Maintenance)_[A-Za-z0-9]+)\"").Select(m => m.Groups[1].Value)
+    .Concat(new[] { "Page_Awaiting approval", "Page_Announcements" }).Distinct().ToList();
+Assert(accessKeys.Count >= 22, "Approval and maintenance strings must be found in the source.");
+foreach (var locale in new[] { "en-US", "ja-JP" })
+{
+    var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
+    foreach (var key in accessKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing approval/announcement string {key} in {locale}");
+}
+
+Console.WriteLine("v0.11.1 native shell, dashboard, commit history, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

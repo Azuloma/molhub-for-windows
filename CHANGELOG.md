@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.11.1
+
+- Announcements moved to the **Server maintenance** page, where maintenance information belongs; the title-bar bell is for notifications again (still "not connected"). Server maintenance is now a read-only page for every signed-in account, pending ones included: the current maintenance state from the server (`maintenance`: "Maintenance active" with the web message and, for members, the access note, the start time; or "No maintenance in progress") and the announcements published when a maintenance ended, with "Load more" and details. Starting or completing maintenance is not shown until it exists natively. The approval screen's Announcements button opens this page.
+- Announcement previews in the list keep the line breaks of the details, as on the web.
+
+## v0.11.0
+
+- Added the approval-waiting screen for accounts that are not approved yet, following the web: a clock, the "Awaiting approval" label, the web heading and intro, **Refresh** and **Announcements**. Such accounts no longer see the Dashboard, Projects or Commit history (the server refuses them anyway); the pane shows the approval screen, Announcements, App settings and Version info. Refresh reads the server session (`session`) and opens the workspace once the same account is approved, without signing in again; otherwise it says the account is not approved yet.
+- Added native, read-only announcements (`announcements`). The title-bar bell now opens the latest four announcements (title, version · date, a short preview) with "View all announcements" instead of a "not connected" message. The Announcements page lists them with "Load more" and shows an announcement's details; the title-bar Back and Alt+Left return to the list. Pending accounts can read them, as on the web.
+- The account menu hides Profile settings for accounts that are not approved.
+
 ## v0.10.0
 
 - Added the native, read-only Commit history page on the data bridge (`history`), following the web "Your commit history" page. The server always limits it to your own commits. It shows the server summary (total commits, projects, named versions) for the current filters, a project filter (all projects or one), commit search, date range (all time / 7 / 30 / 90 days) and latest versions only, commits grouped by day with the project name, and "Load more" paging. Commits and projects open inside the page with a breadcrumb; the title bar Back and Alt+Left walk back through it. The Dashboard's "View your commit history" link opens it.

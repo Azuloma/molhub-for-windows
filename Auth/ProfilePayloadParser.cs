@@ -21,6 +21,10 @@ public static class ProfilePayloadParser
     private static readonly string[] AllowedStatuses = ["pending", "approved", "rejected", "suspended"];
     private static readonly string[] AllowedRoles = ["member", "admin"];
 
+    public static bool IsKnownStatus(string status) => AllowedStatuses.Contains(status, StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsKnownRole(string role) => AllowedRoles.Contains(role, StringComparer.OrdinalIgnoreCase);
+
     public static bool IsMeGet(Uri? uri, string? method)
     {
         return uri is not null

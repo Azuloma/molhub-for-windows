@@ -78,7 +78,7 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
-                                    <TextBlock x:Name="NotificationsHeader" Text="" Padding="20,16,20,14"
+                                    <TextBlock x:Name="NotificationsHeader" Text="" Padding="20,16,20,14" AutomationProperties.HeadingLevel="Level1"
                                                Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15" TextTrimming="CharacterEllipsis" />
                                     <Border Grid.Row="1" Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
@@ -156,6 +156,7 @@
                 <NavigationViewItem Content="" Tag="Dashboard"><NavigationViewItem.Icon><SymbolIcon Symbol="Home" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="" Tag="Projects"><NavigationViewItem.Icon><SymbolIcon Symbol="Folder" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="" Tag="CommitHistory"><NavigationViewItem.Icon><SymbolIcon Symbol="Document" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="" Tag="AwaitingApproval"><NavigationViewItem.Icon><SymbolIcon Symbol="Clock" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>
                 <NavigationViewItem x:Name="MaintenanceItem" Content="" Tag="ServerMaintenance"><NavigationViewItem.Icon><SymbolIcon Symbol="Repair" /></NavigationViewItem.Icon></NavigationViewItem>

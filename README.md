@@ -1,6 +1,6 @@
 # MolHub for Windows
 
-A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.10.0** (beta prototype).
+A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.11.1** (beta prototype).
 
 The app opens a sign-in window that hosts the existing MolHub web login in WebView2. Once the production `/api/me` response confirms the signed-in user, the sign-in window closes and a native main window opens. The main window is a WinUI shell, not a wrapper around the web application.
 
@@ -16,8 +16,10 @@ The app opens a sign-in window that hosts the existing MolHub web login in WebVi
 | Dashboard | Working. Workspace status, top projects, activity and recent commits from the web data bridge, with refresh and error states. Top projects open the native project page. |
 | Projects | Working, read-only. Project list with search and paging, project overview (latest versions, latest change, work reservation, about, team), the project's commits with search / date range / latest-only filters, and commit details. Reservation, publishing and management actions stay on the web for now. |
 | Commit history | Working, read-only. Your own commits (the server limits the list to you) with the summary counts, project / search / date range / latest-only filters, day groups and paging; commits and projects open inside the page. |
-| Server maintenance, Administration, Profile settings | Placeholders. Maintenance and administration appear only for approved admins. |
-| Notifications | Not connected. The flyout says so; no notifications are generated. |
+| Approval waiting | Working. An account that is not approved yet sees the web's approval-waiting screen instead of the workspace (plus Server maintenance, App settings and Version info). Refresh checks the server session and opens the workspace once the account is approved, without signing in again. |
+| Server maintenance | Working, read-only, for every signed-in account. The current maintenance state and the announcements published after each maintenance, with paging and details. Starting or completing maintenance stays on the web. |
+| Administration, Profile settings | Placeholders. Administration appears only for approved admins. |
+| Notifications | Not connected. The bell flyout says so; no notifications are generated. |
 
 Placeholder pages show a heading and a "not connected" message only. They never show sample counts, records or controls that do nothing.
 
@@ -46,8 +48,8 @@ dotnet build FusionLedger.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
 Use Windows PowerShell 5.1 or later. First enable **Settings > System > For developers > Developer Mode**. Then check and install the package you built:
 
 ```powershell
-.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.10.0.0_x64_Debug_Test"
-.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.10.0.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.11.1.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.11.1.0_x64_Debug_Test"
 ```
 
 - `-WhatIf` only checks that the package and its x64 dependency packages are present; nothing is installed.
@@ -78,8 +80,8 @@ This package is unsigned and meant for development only. Windows SmartScreen may
 ## Known limitations
 
 - Sign out revokes the server session through the bridge when it is connected, then clears the WebView2 cookies and site data. If the bridge is unavailable, only the local data is cleared and the server session expires on its own.
-- The admin/profile pages are not connected yet; Projects and Commit history are read-only. There are no notifications, tray icon or background activity.
+- The admin/profile pages are not connected yet; Projects, Commit history and Server maintenance are read-only. There are no notifications, tray icon or background activity.
 
 ## Versioning
 
-The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.10.0.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
+The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.11.1.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
