@@ -87,3 +87,11 @@ This package is unsigned and meant for development only. Windows SmartScreen may
 ## Versioning
 
 The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.4.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+## License
+
+The source code is licensed under the [MIT License](LICENSE).
+
+The icons and logos in `Assets/` and the MolHub name and logo are not covered by the MIT License; all rights reserved. Replace them in forks and redistributed builds.
+
+Third-party packages (Microsoft.WindowsAppSDK, Microsoft.Web.WebView2, Microsoft.Windows.SDK.BuildTools) are used under their own licenses.
