@@ -1,5 +1,4 @@
-![image 01](https://github.com/Azuloma/molhub-for-windows/blob/main/Assets/for%20Github/image01.png)
-# MolHub for Windows
+![image 01](<https://github.com/Azuloma/molhub-for-windows/blob/main/Assets/for%20Github/image01.png>)
 
 A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.14.4** (beta prototype).
 
