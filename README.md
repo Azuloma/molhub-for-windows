@@ -1,3 +1,4 @@
+![README_TitleImage01](FusionLedger.Windows\Assets\for Github\image01.png)
 # MolHub for Windows
 
 A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.14.4** (beta prototype).
