@@ -102,6 +102,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         /// <summary>Reloads data into the already built content (the history keeps its filters).</summary>
         public Func<Task>? Refresh { get; set; }
         public DateTimeOffset LoadedAt { get; set; }
+        /// <summary>A write elsewhere (Project management, another page) may have changed this project's reservation.</summary>
+        public bool WorkStale { get; set; }
         /// <summary>Bumped by every load; an older reply that arrives later is dropped.</summary>
         public int LoadGeneration { get; set; }
     }
@@ -123,6 +125,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
 
     private Task RefreshRootIfStale()
     {
+        // An open project whose reservation may have changed on another page is reloaded when shown again.
+        if (Current is { Kind: ScreenKind.Project, WorkStale: true, Content: not null } project) return ReloadProjectAsync(project);
         if (_stack.Count != 1 || Current is not { Content: not null } root) return Task.CompletedTask;
         if (root.Kind == ScreenKind.List) return DateTimeOffset.Now - _listLoadedAt > StaleAfter ? LoadListAsync(append: false) : Task.CompletedTask;
         return root.Refresh is { } refresh && DateTimeOffset.Now - root.LoadedAt > StaleAfter ? refresh() : Task.CompletedTask;

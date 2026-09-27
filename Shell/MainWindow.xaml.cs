@@ -402,9 +402,11 @@ public sealed partial class MainWindow : Window
 
     private FrameworkElement CreateManagementPage()
     {
-        _management ??= new ManagementView(L, ReadLanguage(),
+        _management ??= new ManagementView(L, ReadLanguage(), _user,
             (command, payload) => _bridge.RequestAsync(command, payload),
-            () => _ = SignOutAsync());
+            () => _ = SignOutAsync(),
+            _writeGate,
+            OnWorkChanged);
         _ = _management.EnsureLoadedAsync();
         return _management;
     }

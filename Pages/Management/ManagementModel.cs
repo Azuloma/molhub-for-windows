@@ -7,7 +7,10 @@ public sealed record ManagedProject(string Id, string Name, string? OwnerId, boo
 
 public sealed record ManagedProjectList(IReadOnlyList<ManagedProject> Items, int Total, int? NextOffset);
 
-public sealed record ManagedMember(string Id, string Username, string Status, byte[]? Avatar);
+public sealed record ManagedMember(string Id, string Username, string Status, byte[]? Avatar, string Role = "member");
+
+/// <summary>An approved account the manager can add (id and name only, as the server sends them).</summary>
+public sealed record ManagedAccount(string Id, string Username);
 
 public sealed record ManagedRequest(string Id, string Kind, string Status, string Reason, string Requester, DateTimeOffset? CreatedAt);
 
@@ -17,7 +20,7 @@ public sealed record ManagedLink(string Id, string ChannelName, string GuildId, 
 
 public sealed record ManagedReservation(string Username, byte[]? Avatar, DateTimeOffset? StartedAt);
 
-/// <summary>`/api/v1/manage/projects/{id}` reduced to what the read-only page shows.</summary>
+/// <summary>`/api/v1/manage/projects/{id}` reduced to what the page shows and its writes need.</summary>
 public sealed record ManagedProjectDetail(
     ManagedProject Project,
     IReadOnlyList<ManagedMember> Members,
@@ -26,7 +29,8 @@ public sealed record ManagedProjectDetail(
     IReadOnlyList<ManagedEvent> Events,
     IReadOnlyList<ManagedLink> Links,
     ManagedReservation? Reservation,
-    bool DiscordConfigured);
+    bool DiscordConfigured,
+    IReadOnlyList<ManagedAccount>? Eligible = null);
 
 public enum ManagedOwnerKind
 {
@@ -36,7 +40,7 @@ public enum ManagedOwnerKind
 }
 
 /// <summary>
-/// Pure rules for the read-only Project management page (`manageProjects` / `manageProject` reads), mirroring the
+/// Pure rules for the Project management page reads (`manageProjects` / `manageProject`), mirroring the
 /// web manage panel. The server lists the projects an approved owner owns (every project for a site admin),
 /// soft-deleted ones last. Nothing here invents data: unknown kinds and statuses are shown as sent.
 /// </summary>
@@ -93,15 +97,19 @@ public static class ManagementModel
             var username = DashboardModel.Text(item, "username", MaxNameLength);
             return id is null || username is null ? null : new ManagedMember(id, username,
                 DashboardModel.Text(item, "status", 20) ?? string.Empty,
-                ProfilePayloadParser.ParsePngDataUri(DashboardModel.Text(item, "avatar", 64 * 1024, trim: false)));
+                ProfilePayloadParser.ParsePngDataUri(DashboardModel.Text(item, "avatar", 64 * 1024, trim: false)),
+                DashboardModel.Text(item, "role", 20) ?? "member");
         }).OfType<ManagedMember>().ToList();
 
         // Account names for resolving the owner and user-target events (members first, then approved accounts).
         var accounts = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var member in members) accounts.TryAdd(member.Id, member.Username);
+        var eligible = new List<ManagedAccount>();
         foreach (var item in Items(data, "eligible", MaxAccounts))
         {
-            if (DashboardModel.Text(item, "id", 100) is { } id && DashboardModel.Text(item, "username", MaxNameLength) is { } name) accounts.TryAdd(id, name);
+            if (DashboardModel.Text(item, "id", 100) is not { } id || DashboardModel.Text(item, "username", MaxNameLength) is not { } name) continue;
+            accounts.TryAdd(id, name);
+            if (ProjectsModel.IsValidId(id)) eligible.Add(new ManagedAccount(id, name));
         }
 
         var requests = Items(data, "requests", MaxRows).Select(item =>
@@ -143,7 +151,7 @@ public static class ManagementModel
 
         var configured = data.TryGetProperty("discord", out var discord) && discord.ValueKind == JsonValueKind.Object
             && discord.TryGetProperty("configured", out var c) && c.ValueKind == JsonValueKind.True;
-        return new ManagedProjectDetail(project, members, accounts, requests, events, links, reservation, configured);
+        return new ManagedProjectDetail(project, members, accounts, requests, events, links, reservation, configured, eligible);
     }
 
     /// <summary>

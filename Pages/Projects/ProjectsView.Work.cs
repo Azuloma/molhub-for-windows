@@ -27,11 +27,12 @@ internal sealed partial class ProjectsView
         PushPublish(projectId, name);
     }
 
-    /// <summary>Makes the first screen reload when shown again (a write elsewhere changed reservations).</summary>
+    /// <summary>Makes the first screen and any open project reload when shown again (a write elsewhere changed reservations).</summary>
     public void MarkStale()
     {
         _listLoadedAt = default;
         if (_stack.Count > 0) _stack[0].LoadedAt = default;
+        foreach (var screen in _stack.Where(s => s.Kind == ScreenKind.Project)) screen.WorkStale = true;
     }
 
     /// <summary>The actions under the reservation state: Start work when free; Publish version and Cancel work when it is yours.</summary>

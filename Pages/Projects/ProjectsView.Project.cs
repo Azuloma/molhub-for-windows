@@ -35,6 +35,9 @@ internal sealed partial class ProjectsView
     /// <summary>Loads the project; returns false only when this load failed (a newer load of the same screen counts as refreshed).</summary>
     private async Task<bool> ReloadProjectAsync(Screen screen)
     {
+        // This reload shows the current state, so a pending "changed elsewhere" mark is settled (a write on this page
+        // reloads right after marking every page stale; it must not reload again and close its own notice).
+        screen.WorkStale = false;
         var generation = ++screen.LoadGeneration;
         var result = await _request("project", ProjectsModel.ProjectPayload(screen.Id));
         // A newer load of the same screen is responsible for what is shown (and for its own error).

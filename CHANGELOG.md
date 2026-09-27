@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.1
+
+- Projects: a project that is already open reloads when you return to it after a change on another page (for example a work reservation released in Project management), instead of showing the old reservation until Refresh.
+
+## v0.14.0
+
+- **Project management** now has the web's management actions, shown where the web shows them: **Add member** (approved accounts that are not members yet) and **Remove from project** (not for the project administrator or site administrators), **Release reservation**, **Request deletion** / **Request restoration** with a reason (only for the project's own administrator; a site administrator approves), **Connect / request approval** for a Discord destination (server and channel IDs typed in, notification language, reason and the sharing consent; an approved destination connects at once, a new one waits for approval) and **Stop integration**, and for site administrators **Assign / transfer owner** (including "Managed by site administrators").
+- Removing, releasing and stopping ask for confirmation first ("Cancel" is the default). Every action is sent once, the project is reloaded and the result is explained in the web wording (account not approved, project administrator protected, owner only, request already handled, Discord access or conflicts, no access, session ended). When the result can't be confirmed nothing is resent; for requests the message warns that sending again could create a duplicate.
+- The read-only note on the page was removed. Discord server/channel discovery and Discord App setup stay on the web.
 ## v0.13.1
 
 - Publish version form: after a failed check, a flagged field's error now clears as soon as the field is fixed, and the "Check the form" notice closes once every flagged field is valid. Fields that were fine get no new error while typing; they are checked again on the next Publish.

@@ -110,6 +110,12 @@
                 <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
+
+            <!-- Project management: a form's own check result under its fields (cleared as the user edits). -->
+            <Style x:Key="ManageFieldErrorTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

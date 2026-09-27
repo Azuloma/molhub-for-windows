@@ -126,7 +126,7 @@ Assert(versionCode.Contains("RuntimeInformation.ProcessArchitecture", StringComp
     && versionCode.Contains("GetAvailableBrowserVersionString", StringComparison.Ordinal)
     && versionCode.Contains("WindowsAppSdkVersion", StringComparison.Ordinal)
     && !versionCode.Contains("typeof(Microsoft.UI.Xaml.Application).Assembly.GetName().Version", StringComparison.Ordinal)
-    && !versionCode.Contains("0.13.1", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
+    && !versionCode.Contains("0.14.1", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
 Assert(loginXaml.Contains("WebView2", StringComparison.Ordinal) && loginCode.Contains("CoreWebView2", StringComparison.Ordinal), "Only LoginWindow may host WebView2.");
 Assert(loginXaml.Contains("x:Name=\"RootGrid\"", StringComparison.Ordinal)
     && loginCode.Contains("ThemeService.ReadSavedPreference", StringComparison.Ordinal)
@@ -163,10 +163,10 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.13.1</Version>", StringComparison.Ordinal), "Version source of truth must be v0.13.1.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.13.1.0\"", StringComparison.Ordinal), "Manifest version must be v0.13.1.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.13.1", StringComparison.Ordinal)
-    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.13.1", StringComparison.Ordinal), "Version documentation must be updated.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.1</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.1.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.1.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.1.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.1", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.14.1", StringComparison.Ordinal), "Version documentation must be updated.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -633,10 +633,25 @@ var managementCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Managem
 Assert(mainCode.Contains("if (page == NativePage.ProjectManagement) return CreateManagementPage();", StringComparison.Ordinal)
     && mainXaml.Contains("Tag=\"ProjectManagement\"", StringComparison.Ordinal)
     && managementCode.Contains("\"manageProjects\"", StringComparison.Ordinal) && managementCode.Contains("\"manageProject\"", StringComparison.Ordinal)
-    && new[] { "addMember", "removeMember", "releaseReservation", "requestProjectChange", "linkProjectDiscord", "disableProjectDiscord" }.All(w => !managementCode.Contains(w, StringComparison.Ordinal))
+    && new[] { "addMember", "removeMember", "releaseReservation", "requestProjectChange", "linkProjectDiscord", "disableProjectDiscord", "assignProjectOwner" }.All(w => managementCode.Contains($"\"{w}\"", StringComparison.Ordinal))
+    && !managementCode.Contains("Manage_ReadOnlyNote", StringComparison.Ordinal)
     && !System.Text.RegularExpressions.Regex.IsMatch(managementCode, "[\uE000-\uF8FF]") && !managementCode.Contains("GLYPH_", StringComparison.Ordinal),
-    "Project management must be the native read-only page with no management write controls and escaped glyphs.");
-var manageKeys = System.Text.RegularExpressions.Regex.Matches(managementCode + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManagementModel.cs")), "\"(Manage_[A-Za-z0-9_]+)\"").Select(m => m.Groups[1].Value)
+    "Project management must be the native page with the web's management writes and escaped glyphs.");
+Assert(managementCode.Contains("if (!_gate.TryEnter())", StringComparison.Ordinal) && managementCode.Contains("ManageWriteModel.Explain(result, createsRecord)", StringComparison.Ordinal)
+    && managementCode.Contains("LoadDetailAsync(++_generation, keepContent: true)", StringComparison.Ordinal)
+    && managementCode.Contains("DefaultButton = ContentDialogButton.Close", StringComparison.Ordinal)
+    && System.Text.RegularExpressions.Regex.Matches(managementCode, "await ConfirmAsync\\(").Count == 3
+    && System.Text.RegularExpressions.Regex.IsMatch(mainCode, @"new ManagementView\([^;]*_writeGate,\s*OnWorkChanged\);"),
+    "Management writes share the app-wide write gate, confirm remove/release/stop (Cancel default), reload the project and explain the answer.");
+var projectsStackCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.cs"))
+    + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Work.cs"))
+    + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Project.cs"));
+Assert(projectsStackCode.Contains("foreach (var screen in _stack.Where(s => s.Kind == ScreenKind.Project)) screen.WorkStale = true;", StringComparison.Ordinal)
+    && projectsStackCode.Contains("if (Current is { Kind: ScreenKind.Project, WorkStale: true, Content: not null } project) return ReloadProjectAsync(project);", StringComparison.Ordinal)
+    && projectsStackCode.Contains("screen.WorkStale = false;", StringComparison.Ordinal),
+    "An open project reloads when shown again after a write on another page (e.g. a reservation released in Project management).");
+var manageKeys = System.Text.RegularExpressions.Regex.Matches(managementCode + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManagementModel.cs"))
+        + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManageWriteModel.cs")), "\"(Manage_[A-Za-z0-9_]+)\"").Select(m => m.Groups[1].Value)
     .Where(k => !k.EndsWith("_", StringComparison.Ordinal))
     .Concat(new[] { "Page_Project management" })
     .Concat(new[] { "pending", "approved", "rejected", "cancelled", "suspended" }.Select(s => "Manage_Status_" + s))
@@ -644,12 +659,72 @@ var manageKeys = System.Text.RegularExpressions.Regex.Matches(managementCode + F
     .Concat(new[] { "member_added", "member_removed", "owner_assigned", "reservation_released", "request_delete", "request_restore", "request_discord",
         "request_approved", "request_rejected", "discord_linked", "discord_disabled", "project_deleted", "project_restored" }.Select(s => "Manage_Event_" + s))
     .Distinct().ToList();
-Assert(manageKeys.Count >= 40, "Project management strings must be found in the source.");
+Assert(manageKeys.Count >= 90, "Project management strings must be found in the source.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
     foreach (var key in manageKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing project management string {key} in {locale}");
 }
+
+// ----- Project management writes (v0.14.1) -----
+var managedWithAdmin = ManagementModel.ParseDetail(Json("""
+{"project":{"id":"p1","name":"Sonic Nightmare","ownerId":"u1","deletedAt":null},
+ "members":[{"id":"u1","username":"azunel","status":"approved","role":"member"},{"id":"u2","username":"bea","status":"approved","role":"member"},{"id":"u5","username":"root","status":"approved","role":"admin"}],
+ "eligible":[{"id":"u1","username":"azunel"},{"id":"u2","username":"bea"},{"id":"u4","username":"dan"},{"id":"bad id","username":"x"}],
+ "reservation":{"userId":"u2","username":"bea","startedAt":"2026-09-21T08:00:00.000Z"}}
+"""))!;
+var deletedManaged = managedWithAdmin with { Project = managedWithAdmin.Project with { Deleted = true } };
+Assert(managedWithAdmin.Members[2].Role == "admin" && managedWithAdmin.Eligible!.Count == 3
+    && ManageWriteModel.AddCandidates(managedWithAdmin).Select(a => a.Username).SequenceEqual(new[] { "dan" })
+    && ManageWriteModel.AddCandidates(deletedManaged).Count == 0,
+    "Add member offers approved accounts that are not members yet (valid ids only), and nothing on a deleted project, like the web.");
+Assert(!ManageWriteModel.CanRemove(managedWithAdmin.Members[0], managedWithAdmin) && ManageWriteModel.CanRemove(managedWithAdmin.Members[1], managedWithAdmin)
+    && !ManageWriteModel.CanRemove(managedWithAdmin.Members[2], managedWithAdmin) && !ManageWriteModel.CanRemove(managedWithAdmin.Members[1], deletedManaged)
+    && ManageWriteModel.CanRelease(managedWithAdmin) && !ManageWriteModel.CanRelease(deletedManaged) && !ManageWriteModel.CanRelease(managedWithAdmin with { Reservation = null }),
+    "Remove is offered except for the project administrator and site admins (OWNER_PROTECTED); release only for an active reservation on an active project.");
+Assert(ManageWriteModel.CanRequest(managedWithAdmin, "Azunel") && !ManageWriteModel.CanRequest(managedWithAdmin, "bea")
+    && !ManageWriteModel.CanRequest(managedWithAdmin with { Project = managedWithAdmin.Project with { OwnerId = null } }, "azunel")
+    && ManageWriteModel.RequestKind(managedWithAdmin) == "delete" && ManageWriteModel.RequestKind(deletedManaged) == "restore",
+    "Deletion/restoration requests are only for the project's own administrator (OWNER_ONLY) and match the deleted state (REQUEST_CHANGED).");
+var requestPayload = ManageWriteModel.RequestPayload("p1", "delete", "  Done with it  ")!;
+Assert(requestPayload["reason"]!.GetValue<string>() == "Done with it" && requestPayload["kind"]!.GetValue<string>() == "delete"
+    && ManageWriteModel.RequestPayload("p1", "delete", "   ") is null && ManageWriteModel.RequestPayload("p1", "delete", new string('r', 1001)) is null
+    && ManageWriteModel.RequestPayload("p1", "discord", "x") is null && ManageWriteModel.RequestPayload("../p", "delete", "x") is null,
+    "Requests send a trimmed reason of 1–1000 characters and only delete/restore.");
+Assert(ManageWriteModel.AddMemberPayload("p1", "u4")!["user"]!.GetValue<string>() == "u4" && ManageWriteModel.AddMemberPayload("p1", "bad id") is null
+    && ManageWriteModel.RemoveMemberPayload("p1", "u2")!["userId"]!.GetValue<string>() == "u2" && ManageWriteModel.RemoveMemberPayload("p1", null) is null
+    && ManageWriteModel.ReleasePayload("p1")!.Count == 1 && ManageWriteModel.DisableDiscordPayload("p1", "l1")!["linkId"]!.GetValue<string>() == "l1"
+    && ManageWriteModel.AssignOwnerPayload("p1", null) is { } siteManagedPayload && siteManagedPayload.ContainsKey("user") && siteManagedPayload["user"] is null
+    && ManageWriteModel.AssignOwnerPayload("p1", "u4")!["user"]!.GetValue<string>() == "u4" && ManageWriteModel.AssignOwnerPayload("p1", "../u") is null,
+    "Management payloads carry only valid ids; a null owner makes the project site-managed.");
+var discordDraft = new DiscordDraft(" 123456789012345678 ", "223456789012345678", "ja", " Team channel ", true);
+var discordPayload = ManageWriteModel.DiscordLinkPayload("p1", discordDraft)!;
+Assert(ManageWriteModel.Validate(discordDraft) == DiscordFieldError.None && discordPayload["guild"]!.GetValue<string>() == "123456789012345678"
+    && discordPayload["consent"]!.GetValue<bool>() && discordPayload["reason"]!.GetValue<string>() == "Team channel" && discordPayload["locale"]!.GetValue<string>() == "ja"
+    && ManageWriteModel.Validate(new DiscordDraft("123", "abc", "en", "", false)) == (DiscordFieldError.GuildInvalid | DiscordFieldError.ChannelInvalid | DiscordFieldError.ReasonMissing | DiscordFieldError.ConsentMissing)
+    && ManageWriteModel.DiscordLinkPayload("p1", discordDraft with { Consent = false }) is null && ManageWriteModel.DiscordLinkPayload("p1", discordDraft with { Locale = "fr" }) is null
+    && ManageWriteModel.DefaultLocale("ja-JP") == "ja" && ManageWriteModel.DefaultLocale("en-US") == "en",
+    "Discord destinations need 17–20 digit ids, a reason, consent and en/ja, as the server requires.");
+Assert(ManageWriteModel.CanStopDiscord(new ManagedLink("l1", "general", "1", "2", true)) && !ManageWriteModel.CanStopDiscord(new ManagedLink("l2", "", "1", "2", false))
+    && ManageWriteModel.CanLinkDiscord(managedWithAdmin) && !ManageWriteModel.CanLinkDiscord(deletedManaged),
+    "Stop integration is offered for active destinations; new destinations only on active projects.");
+Assert(ManageWriteModel.IsPending(new BridgeResult("r", 200, true, Json("""{"ok":true,"pending":true}"""), null, null, null, false, BridgeOutcome.Applied))
+    && !ManageWriteModel.IsPending(new BridgeResult("r", 200, true, Json("""{"ok":true}"""), null, null, null, false, BridgeOutcome.Applied)),
+    "A pending answer is explained as waiting for a site administrator.");
+Assert(ManageWriteModel.Explain(Write(403, false, "OWNER_PROTECTED", BridgeOutcome.Rejected)) is { Kind: WriteOutcomeKind.Rejected, MessageKey: "Manage_ErrorOwnerProtected" }
+    && ManageWriteModel.Explain(Write(403, false, "MEMBER_NOT_APPROVED", BridgeOutcome.Rejected)).MessageKey == "Manage_ErrorMemberNotApproved"
+    && ManageWriteModel.Explain(Write(403, false, "OWNER_ONLY", BridgeOutcome.Rejected)).MessageKey == "Manage_ErrorOwnerOnly"
+    && ManageWriteModel.Explain(Write(409, false, "REQUEST_CHANGED", BridgeOutcome.Rejected)).MessageKey == "Manage_ErrorRequestChanged"
+    && ManageWriteModel.Explain(Write(409, false, "DISCORD_LINK_CONFLICT", BridgeOutcome.Rejected)).MessageKey == "Manage_ErrorDiscordLinkConflict"
+    && ManageWriteModel.Explain(Write(403, false, "PROJECT_FORBIDDEN", BridgeOutcome.Rejected)).MessageKey == "Manage_ErrorNoAccess"
+    && ManageWriteModel.Explain(Write(409, false, "PROJECT_DELETED", BridgeOutcome.Rejected)).MessageKey == "Work_ErrorProjectDeleted"
+    && ManageWriteModel.Explain(Write(401, false, "UNAUTHORIZED", BridgeOutcome.Rejected)) is { SessionEnded: true, MessageKey: "Work_ErrorSession" }
+    && ManageWriteModel.Explain(Write(502, false, "DISCORD_UNAVAILABLE", BridgeOutcome.Unknown), createsRecord: true) is { Kind: WriteOutcomeKind.Unknown, MessageKey: "Manage_UnknownRequest" }
+    && ManageWriteModel.Explain(BridgeResult.HostFailure("r", "TIMEOUT", false, BridgeOutcome.Unknown)).MessageKey == "Manage_Unknown"
+    && ManageWriteModel.Explain(Write(200, true, null, BridgeOutcome.Applied)).Kind == WriteOutcomeKind.Applied,
+    "Management answers name the management codes; an unknown request/Discord write warns about a duplicate request.");
+Assert(new[] { "addMember", "removeMember", "releaseReservation", "requestProjectChange", "linkProjectDiscord", "disableProjectDiscord", "assignProjectOwner" }
+    .All(c => BridgePolicy.IsKnownCommand(c) && BridgePolicy.IsWrite(c)), "The management writes are allowlisted bridge writes.");
 
 // ----- Writes: start work, cancel work, publish version -----
 var reservedProject = ProjectsModel.ParseProjectList(Json("""
@@ -746,4 +821,4 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
     Assert(!resource.Contains("publish from MolHub on the web", StringComparison.Ordinal), $"The owner hint must no longer say publishing is web-only: {locale}");
 }
 
-Console.WriteLine("v0.13.1 native shell, dashboard, work writes, commit history, project management, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.1 native shell, dashboard, work writes, commit history, project management, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
