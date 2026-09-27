@@ -5,6 +5,7 @@ public enum NativePage
     Dashboard,
     Projects,
     CommitHistory,
+    ProjectManagement,
     AwaitingApproval,
     ServerMaintenance,
     AppSettings,
@@ -36,6 +37,9 @@ public static class NativePageCatalog
         NativePage.AwaitingApproval => !IsApproved(user),
         NativePage.ServerMaintenance or NativePage.AppSettings or NativePage.VersionInfo => true,
         NativePage.Administration => CanAdminister(user),
+        // The web shows "Manage" to approved non-admin owners; admins reach the same page from Admin. Natively both get
+        // the pane item (admins manage every project) while the native Administration page is a placeholder.
+        NativePage.ProjectManagement => IsApproved(user) && (user.ProjectManager || CanAdminister(user)),
         _ => IsApproved(user)
     };
 
@@ -47,6 +51,7 @@ public static class NativePageCatalog
         NativePage.Dashboard => "Dashboard",
         NativePage.Projects => "Projects",
         NativePage.CommitHistory => "Commit history",
+        NativePage.ProjectManagement => "Project management",
         NativePage.AwaitingApproval => "Awaiting approval",
         NativePage.ServerMaintenance => "Server maintenance",
         NativePage.AppSettings => "App settings",

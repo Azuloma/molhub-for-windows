@@ -19,6 +19,7 @@
     <Compile Include="..\..\Pages\Projects\ProjectsModel.cs" Link="ProjectsModel.cs" />
     <Compile Include="..\..\Pages\History\HistoryModel.cs" Link="HistoryModel.cs" />
     <Compile Include="..\..\Pages\Maintenance\MaintenanceModel.cs" Link="MaintenanceModel.cs" />
+    <Compile Include="..\..\Pages\Management\ManagementModel.cs" Link="ManagementModel.cs" />
     <Compile Include="..\..\Pages\Approval\ApprovalModel.cs" Link="ApprovalModel.cs" />
     <Compile Include="..\..\Shell\NativePage.cs" Link="NativePage.cs" />
   </ItemGroup>

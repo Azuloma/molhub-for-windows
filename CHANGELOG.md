@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.12.0
+
+- Added the native, read-only **Project management** page (`manageProjects`, `manageProject`), following the web "Manage" panel. It appears in the navigation pane for approved project owners and for site administrators (who manage every project). Pick a project (deleted projects are listed last and marked "Deleted") to see its state and project administrator, members (with the administrator marked and each account's status), the current work reservation, approval requests (kind, reason, requester, date, status), Discord destinations and project activity. Member events name the affected account; other internal ids are not shown. "You do not manage any projects." is shown when the list is empty.
+- The page is read-only: adding or removing members, force-releasing reservations, deletion/restoration requests and Discord changes stay on the web for now, and the page says so.
+
 ## v0.11.1
 
 - Announcements moved to the **Server maintenance** page, where maintenance information belongs; the title-bar bell is for notifications again (still "not connected"). Server maintenance is now a read-only page for every signed-in account, pending ones included: the current maintenance state from the server (`maintenance`: "Maintenance active" with the web message and, for members, the access note, the start time; or "No maintenance in progress") and the announcements published when a maintenance ended, with "Load more" and details. Starting or completing maintenance is not shown until it exists natively. The approval screen's Announcements button opens this page.

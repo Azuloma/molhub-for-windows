@@ -156,6 +156,7 @@
                 <NavigationViewItem Content="" Tag="Dashboard"><NavigationViewItem.Icon><SymbolIcon Symbol="Home" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="" Tag="Projects"><NavigationViewItem.Icon><SymbolIcon Symbol="Folder" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="" Tag="CommitHistory"><NavigationViewItem.Icon><SymbolIcon Symbol="Document" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem Content="" Tag="ProjectManagement"><NavigationViewItem.Icon><SymbolIcon Symbol="Manage" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="" Tag="AwaitingApproval"><NavigationViewItem.Icon><SymbolIcon Symbol="Clock" /></NavigationViewItem.Icon></NavigationViewItem>
             </NavigationView.MenuItems>
             <NavigationView.FooterMenuItems>

@@ -126,7 +126,7 @@ Assert(versionCode.Contains("RuntimeInformation.ProcessArchitecture", StringComp
     && versionCode.Contains("GetAvailableBrowserVersionString", StringComparison.Ordinal)
     && versionCode.Contains("WindowsAppSdkVersion", StringComparison.Ordinal)
     && !versionCode.Contains("typeof(Microsoft.UI.Xaml.Application).Assembly.GetName().Version", StringComparison.Ordinal)
-    && !versionCode.Contains("0.11.1", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
+    && !versionCode.Contains("0.12.0", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
 Assert(loginXaml.Contains("WebView2", StringComparison.Ordinal) && loginCode.Contains("CoreWebView2", StringComparison.Ordinal), "Only LoginWindow may host WebView2.");
 Assert(loginXaml.Contains("x:Name=\"RootGrid\"", StringComparison.Ordinal)
     && loginCode.Contains("ThemeService.ReadSavedPreference", StringComparison.Ordinal)
@@ -163,10 +163,10 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.11.1</Version>", StringComparison.Ordinal), "Version source of truth must be v0.11.1.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.11.1.0\"", StringComparison.Ordinal), "Manifest version must be v0.11.1.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.11.1", StringComparison.Ordinal)
-    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.11.1", StringComparison.Ordinal), "Version documentation must be updated.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.12.0</Version>", StringComparison.Ordinal), "Version source of truth must be v0.12.0.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.12.0.0\"", StringComparison.Ordinal), "Manifest version must be v0.12.0.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.12.0", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.12.0", StringComparison.Ordinal), "Version documentation must be updated.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -580,4 +580,74 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
     foreach (var key in accessKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing approval/announcement string {key} in {locale}");
 }
 
-Console.WriteLine("v0.11.1 native shell, dashboard, commit history, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+// ----- Project management (read-only; approved owners and site admins) -----
+Assert(NativePageCatalog.IsAvailable(NativePage.ProjectManagement, approvedMember with { ProjectManager = true })
+    && NativePageCatalog.IsAvailable(NativePage.ProjectManagement, approvedAdmin)
+    && !NativePageCatalog.IsAvailable(NativePage.ProjectManagement, approvedMember)
+    && !NativePageCatalog.IsAvailable(NativePage.ProjectManagement, pendingUser with { ProjectManager = true }),
+    "Project management is for approved project owners and site admins only, like the web Manage entry.");
+var managedList = ManagementModel.ParseList(Json("""
+[{"id":"p1","name":"Sonic Nightmare","ownerId":"u1","deletedAt":null,"reservation":null},
+ {"id":"p2","name":"Old project","ownerId":"u1","deletedAt":"2026-09-01T00:00:00.000Z"},
+ {"id":"bad id","name":"x"}]
+"""), Json("""{"limit":100,"offset":0,"nextOffset":null,"total":2}"""));
+Assert(managedList is { Items.Count: 2, Total: 2 } && !managedList.Items[0].Deleted && managedList.Items[1].Deleted
+    && ManagementModel.Select(managedList.Items, "p2") == "p2" && ManagementModel.Select(managedList.Items, "gone") == "p1"
+    && ManagementModel.Select([], null) is null && ManagementModel.ParseList(Json("{}"), null) is null,
+    "The managed list keeps deleted projects (labelled) and selects the kept project or the first one, like the web.");
+var managedDetail = ManagementModel.ParseDetail(Json("""
+{"project":{"id":"p1","name":"Sonic Nightmare","ownerId":"u1","deletedAt":null},
+ "members":[{"id":"u2","username":"bea","status":"approved","role":"member","avatar":null},{"id":"u3","username":"cid","status":"suspended","role":"member"}],
+ "eligible":[{"id":"u1","username":"azunel","avatar":null},{"id":"u2","username":"bea","avatar":null}],
+ "requests":[{"id":"r1","kind":"delete","status":"pending","reason":" No longer needed ","requester":"azunel","createdAt":"2026-09-20T10:00:00.000Z"},{"id":"r2","kind":"weird","status":"odd"}],
+ "logs":[{"id":1,"kind":"member_added","actor":"azunel","target":"u2","createdAt":"2026-09-19T10:00:00.000Z"},{"id":2,"kind":"request_delete","actor":"azunel","target":"r1"},{"id":3,"kind":"member_removed","target":"u404"}],
+ "links":[{"id":"l1","guildId":"123","channelId":"456","channelName":"general","locale":"en","enabled":true},{"id":"l2","guildId":"1","channelId":"2","channelName":null,"enabled":false}],
+ "reservation":{"userId":"u2","username":"bea","avatar":null,"startedAt":"2026-09-21T08:00:00.000Z"},
+ "discord":{"configured":false,"approvals":[]}}
+"""));
+Assert(managedDetail is { Members.Count: 2, Requests.Count: 2, Events.Count: 3, Links.Count: 2, DiscordConfigured: false, Reservation.Username: "bea" }
+    && managedDetail.Requests[0].Reason == "No longer needed" && managedDetail.Links[0].Enabled && !managedDetail.Links[1].Enabled && managedDetail.Links[1].ChannelName == "",
+    "The manage detail must parse members, requests, activity, Discord links and the reservation from the server DTO.");
+Assert(ManagementModel.Owner(managedDetail!) == (ManagedOwnerKind.Account, "azunel")
+    && ManagementModel.Owner(managedDetail! with { Project = managedDetail.Project with { OwnerId = null } }).Kind == ManagedOwnerKind.SiteManaged
+    && ManagementModel.Owner(managedDetail! with { Project = managedDetail.Project with { OwnerId = "u999" } }).Kind == ManagedOwnerKind.Unknown,
+    "The project administrator is resolved from members/approved accounts; no owner means site-managed, an unresolvable one is unknown.");
+Assert(ManagementModel.TargetName(managedDetail!.Events[0], managedDetail) == "bea" && ManagementModel.TargetName(managedDetail.Events[1], managedDetail) == ""
+    && ManagementModel.TargetName(managedDetail.Events[2], managedDetail) == "",
+    "Only member events name their target account; request ids and unknown accounts are not shown.");
+Assert(ManagementModel.ParseDetail(Json("""{"project":{"id":"p1","name":"P"},"reservation":{"userId":"u2","username":null,"startedAt":"2026-09-21T08:00:00.000Z"}}""")) is { Reservation: null, Members.Count: 0 },
+    "A reservation without a holder name must not render a nameless holder; missing sections parse as empty.");
+var manyAccounts = "[" + string.Join(",", Enumerable.Range(0, 300).Select(i => $$"""{"id":"a{{i}}","username":"user{{i}}"}""")) + "]";
+Assert(ManagementModel.Owner(ManagementModel.ParseDetail(Json($$"""{"project":{"id":"p1","name":"P","ownerId":"a299"},"eligible":{{manyAccounts}}}"""))!) == (ManagedOwnerKind.Account, "user299"),
+    "The owner must stay resolvable on sites with more than 200 approved accounts.");
+Assert(ManagementModel.StatusKey("cancelled") == "Manage_Status_cancelled" && ManagementModel.StatusKey("odd") is null
+    && ManagementModel.KindKey("discord") == "Manage_Kind_discord" && ManagementModel.KindKey("weird") is null
+    && ManagementModel.EventKey("project_restored") == "Manage_Event_project_restored" && ManagementModel.EventKey("x") is null
+    && ManagementModel.DetailPayload("../x") is null && ManagementModel.DetailPayload("p1")!["projectId"]!.GetValue<string>() == "p1"
+    && ManagementModel.ListPayload()["limit"]!.GetValue<int>() == ManagementModel.ProjectLimit,
+    "Labels exist only for known kinds/statuses (others show as sent); payloads send only valid ids.");
+Assert(new[] { "manageProjects", "manageProject" }.All(c => BridgePolicy.IsKnownCommand(c) && !BridgePolicy.IsWrite(c)),
+    "Project management must use only the manage read commands.");
+var managementCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManagementView.cs"));
+Assert(mainCode.Contains("if (page == NativePage.ProjectManagement) return CreateManagementPage();", StringComparison.Ordinal)
+    && mainXaml.Contains("Tag=\"ProjectManagement\"", StringComparison.Ordinal)
+    && managementCode.Contains("\"manageProjects\"", StringComparison.Ordinal) && managementCode.Contains("\"manageProject\"", StringComparison.Ordinal)
+    && new[] { "addMember", "removeMember", "releaseReservation", "requestProjectChange", "linkProjectDiscord", "disableProjectDiscord" }.All(w => !managementCode.Contains(w, StringComparison.Ordinal))
+    && !System.Text.RegularExpressions.Regex.IsMatch(managementCode, "[\uE000-\uF8FF]") && !managementCode.Contains("GLYPH_", StringComparison.Ordinal),
+    "Project management must be the native read-only page with no management write controls and escaped glyphs.");
+var manageKeys = System.Text.RegularExpressions.Regex.Matches(managementCode + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManagementModel.cs")), "\"(Manage_[A-Za-z0-9_]+)\"").Select(m => m.Groups[1].Value)
+    .Where(k => !k.EndsWith("_", StringComparison.Ordinal))
+    .Concat(new[] { "Page_Project management" })
+    .Concat(new[] { "pending", "approved", "rejected", "cancelled", "suspended" }.Select(s => "Manage_Status_" + s))
+    .Concat(new[] { "delete", "restore", "discord" }.Select(s => "Manage_Kind_" + s))
+    .Concat(new[] { "member_added", "member_removed", "owner_assigned", "reservation_released", "request_delete", "request_restore", "request_discord",
+        "request_approved", "request_rejected", "discord_linked", "discord_disabled", "project_deleted", "project_restored" }.Select(s => "Manage_Event_" + s))
+    .Distinct().ToList();
+Assert(manageKeys.Count >= 40, "Project management strings must be found in the source.");
+foreach (var locale in new[] { "en-US", "ja-JP" })
+{
+    var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
+    foreach (var key in manageKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing project management string {key} in {locale}");
+}
+
+Console.WriteLine("v0.12.0 native shell, dashboard, commit history, project management, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

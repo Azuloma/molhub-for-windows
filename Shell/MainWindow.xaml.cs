@@ -28,6 +28,7 @@ public sealed partial class MainWindow : Window
     private ProjectsView? _commitHistory;
     private ApprovalView? _approval;
     private MaintenanceView? _maintenance;
+    private ManagementView? _management;
     private string _bridgeStatusKey = "BridgeConnecting";
     private TextBlock? _bridgeStatusText;
     private bool _signingOut;
@@ -337,6 +338,7 @@ public sealed partial class MainWindow : Window
         if (page == NativePage.CommitHistory) return CreateCommitHistoryPage();
         if (page == NativePage.AwaitingApproval) return CreateApprovalPage();
         if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();
+        if (page == NativePage.ProjectManagement) return CreateManagementPage();
         if (page == NativePage.AppSettings) return CreateSettingsPage();
         if (page == NativePage.VersionInfo) return CreateVersionInfoPage();
 
@@ -388,6 +390,15 @@ public sealed partial class MainWindow : Window
             () => NavigateTo(NativePage.ServerMaintenance),
             () => _ = SignOutAsync());
         return _approval;
+    }
+
+    private FrameworkElement CreateManagementPage()
+    {
+        _management ??= new ManagementView(L, ReadLanguage(),
+            (command, payload) => _bridge.RequestAsync(command, payload),
+            () => _ = SignOutAsync());
+        _ = _management.EnsureLoadedAsync();
+        return _management;
     }
 
     private FrameworkElement CreateMaintenancePage()
