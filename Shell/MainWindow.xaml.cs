@@ -29,11 +29,14 @@ public sealed partial class MainWindow : Window
     private ApprovalView? _approval;
     private MaintenanceView? _maintenance;
     private ManagementView? _management;
-    // One write at a time across the Projects and Commit history pages.
+    private ProfileView? _profile;
+    // One write at a time for the whole app (Projects, Commit history, Project management and Profile settings).
     private readonly WriteGate _writeGate = new();
     private string _bridgeStatusKey = "BridgeConnecting";
     private TextBlock? _bridgeStatusText;
     private bool _signingOut;
+    // A password change ended the session while another write was still being sent: sign out once the gate is free.
+    private bool _signOutWhenGateFree;
     private NativePage _currentPage = NativePage.Dashboard;
     private RadioButtons? _languageOptions;
     private RadioButtons? _themeOptions;
@@ -206,12 +209,37 @@ public sealed partial class MainWindow : Window
         ApplyPageAccess();
         ProfilePicture.DisplayName = _user.Username;
         AccountPicture.DisplayName = _user.Username;
+        ApplyHeaderAvatars();
+    }
+
+    /// <summary>Shows the current icon in the title bar and the account flyout, or the initials when there is none.</summary>
+    private void ApplyHeaderAvatars()
+    {
         if (_user.AvatarPng is { Length: > 0 } avatar)
         {
             // The account flyout picture is out of the tree while closed, so both pictures re-decode on load.
             AvatarImage.Attach(ProfilePicture, avatar, 64);
             AvatarImage.Attach(AccountPicture, avatar, 96);
         }
+        else
+        {
+            AvatarImage.Clear(ProfilePicture);
+            AvatarImage.Clear(AccountPicture);
+        }
+    }
+
+    /// <summary>
+    /// Profile settings saved (or re-read) the icon: the title bar, the account flyout and the Projects profile column show
+    /// it at once, and the other pages reload when shown again so server-sent avatars are current too.
+    /// </summary>
+    private void OnAvatarChanged(byte[]? avatar)
+    {
+        if (_signingOut) return;
+        UpdateUser(_user with { AvatarPng = avatar });
+        ApplyHeaderAvatars();
+        _projects?.UserChanged();
+        _commitHistory?.UserChanged();
+        OnWorkChanged();
     }
 
     /// <summary>
@@ -341,6 +369,7 @@ public sealed partial class MainWindow : Window
         if (page == NativePage.AwaitingApproval) return CreateApprovalPage();
         if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();
         if (page == NativePage.ProjectManagement) return CreateManagementPage();
+        if (page == NativePage.ProfileSettings) return CreateProfilePage();
         if (page == NativePage.AppSettings) return CreateSettingsPage();
         if (page == NativePage.VersionInfo) return CreateVersionInfoPage();
 
@@ -357,16 +386,16 @@ public sealed partial class MainWindow : Window
             page => NavigateTo(page),
             OpenProject,
             OpenPublish,
-            () => _ = SignOutAsync());
+            SignOutWhenWritesFinish);
         _ = _dashboard.EnsureLoadedAsync();
         return _dashboard;
     }
 
     private FrameworkElement CreateProjectsPage()
     {
-        _projects ??= new ProjectsView(L, _user, ReadLanguage(),
+        _projects ??= new ProjectsView(L, () => _user, ReadLanguage(),
             (command, payload) => _bridge.RequestAsync(command, payload),
-            () => _ = SignOutAsync(),
+            SignOutWhenWritesFinish,
             UpdateBackButton,
             ProjectsRoot.List,
             OnWorkChanged,
@@ -377,9 +406,9 @@ public sealed partial class MainWindow : Window
 
     private FrameworkElement CreateCommitHistoryPage()
     {
-        _commitHistory ??= new ProjectsView(L, _user, ReadLanguage(),
+        _commitHistory ??= new ProjectsView(L, () => _user, ReadLanguage(),
             (command, payload) => _bridge.RequestAsync(command, payload),
-            () => _ = SignOutAsync(),
+            SignOutWhenWritesFinish,
             UpdateBackButton,
             ProjectsRoot.History,
             OnWorkChanged,
@@ -396,7 +425,7 @@ public sealed partial class MainWindow : Window
             UpdateUser,
             // The web's "Announcements" button; the announcements live on the Server maintenance page.
             () => NavigateTo(NativePage.ServerMaintenance),
-            () => _ = SignOutAsync());
+            SignOutWhenWritesFinish);
         return _approval;
     }
 
@@ -404,11 +433,25 @@ public sealed partial class MainWindow : Window
     {
         _management ??= new ManagementView(L, ReadLanguage(), _user,
             (command, payload) => _bridge.RequestAsync(command, payload),
-            () => _ = SignOutAsync(),
+            SignOutWhenWritesFinish,
             _writeGate,
             OnWorkChanged);
         _ = _management.EnsureLoadedAsync();
         return _management;
+    }
+
+    private FrameworkElement CreateProfilePage()
+    {
+        _profile ??= new ProfileView(L,
+            (command, payload) => _bridge.RequestAsync(command, payload),
+            () => _user,
+            _writeGate,
+            () => WindowNative.GetWindowHandle(this),
+            OnAvatarChanged,
+            SignOutWhenWritesFinish,
+            SignOutWhenWritesFinish);
+        _ = _profile.EnsureLoadedAsync();
+        return _profile;
     }
 
     private FrameworkElement CreateMaintenancePage()
@@ -416,7 +459,7 @@ public sealed partial class MainWindow : Window
         _maintenance ??= new MaintenanceView(L, ReadLanguage(),
             (command, payload) => _bridge.RequestAsync(command, payload),
             () => _user,
-            () => _ = SignOutAsync(),
+            SignOutWhenWritesFinish,
             UpdateBackButton);
         _ = _maintenance.EnsureLoadedAsync();
         return _maintenance;
@@ -705,11 +748,67 @@ public sealed partial class MainWindow : Window
     private async Task SignOutAsync()
     {
         if (_signingOut) return;
+        // Signing out now would drop the answer of a write that is still being sent; sign out after it finishes.
+        if (_writeGate.InFlight)
+        {
+            await ShowSignOutBlockedAsync();
+            return;
+        }
         _signingOut = true;
         // Revoke the server session first when the bridge is up; local sign-in data is cleared either way.
         if (_bridge.State == BridgeConnectionState.Connected) await _bridge.RequestAsync("logout");
         App.RequestSignOut();
         _signingOut = false;
+    }
+
+    /// <summary>
+    /// The session already ended on the server (a page's "Sign in again", or a password change that was applied or
+    /// unconfirmed), so this sign-out is never refused: when another write is still being sent, it runs as soon as the
+    /// write gate is released.
+    /// </summary>
+    private void SignOutWhenWritesFinish()
+    {
+        if (_writeGate.InFlight)
+        {
+            if (_signOutWhenGateFree) return;
+            _signOutWhenGateFree = true;
+            _writeGate.Released += SignOutWhenGateFree;
+            return;
+        }
+        _ = SignOutAsync();
+    }
+
+    private void SignOutWhenGateFree()
+    {
+        if (_writeGate.InFlight) return;
+        _writeGate.Released -= SignOutWhenGateFree;
+        _signOutWhenGateFree = false;
+        // Released is raised inside the finishing write's finally; sign out after it has returned, deferring again if
+        // another write took the gate in between.
+        if (!DispatcherQueue.TryEnqueue(SignOutWhenWritesFinish)) SignOutWhenWritesFinish();
+    }
+
+    private async Task ShowSignOutBlockedAsync()
+    {
+        if (RootGrid.XamlRoot is null) return;
+        var dialog = new ContentDialog
+        {
+            Title = L("Work_BusyTitle"),
+            Content = new TextBlock { Text = L("Shell_SignOutBlocked"), TextWrapping = TextWrapping.Wrap },
+            CloseButtonText = L("Close"),
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = RootGrid.XamlRoot,
+            RequestedTheme = RootGrid.ActualTheme,
+            Style = PageParts.Res("DefaultContentDialogStyle")
+        };
+        try
+        {
+            await dialog.ShowAsync();
+        }
+        catch
+        {
+            // Another dialog is already open; sign-out stays refused either way.
+        }
     }
 
     private string LocalizedValue(string prefix, string value)

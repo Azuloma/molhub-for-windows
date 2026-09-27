@@ -25,6 +25,24 @@ internal sealed class PageParts(Func<string, string> localize)
 
     public static Border Divider() => new() { Style = Res("DashboardDividerStyle") };
 
+    /// <summary>
+    /// Vertical page scroller around a column of at most <paramref name="maxWidth"/> DIP, centered in wide windows. The
+    /// column is placed by <see cref="CenteredColumnPanel"/> instead of Stretch + MaxWidth: with that combination WinUI
+    /// placed the column as if it were only as wide as its content, so a page with only short text (Profile settings)
+    /// was pushed right and clipped.
+    /// </summary>
+    public static ScrollViewer CenteredPage(FrameworkElement column, double maxWidth)
+    {
+        var host = new CenteredColumnPanel { ColumnMaxWidth = maxWidth };
+        host.Children.Add(column);
+        return new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = host
+        };
+    }
+
     public static TextBlock Heading(string text, AutomationHeadingLevel level, string style = "BodyStrongTextBlockStyle")
     {
         var heading = new TextBlock { Text = text, Style = Res(style), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
@@ -161,6 +179,37 @@ internal sealed class PageParts(Func<string, string> localize)
 
     public static Microsoft.UI.Xaml.Media.FontFamily SymbolFont =>
         (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"];
+}
+
+/// <summary>
+/// Gives its child the available width (the scroll viewport, so a scroll bar that takes space is left out) up to
+/// <see cref="ColumnMaxWidth"/> and centers it; the width is set during layout, so there is no first frame at another width.
+/// </summary>
+internal sealed class CenteredColumnPanel : Panel
+{
+    public double ColumnMaxWidth { get; set; } = double.PositiveInfinity;
+
+    private double ColumnWidth(double available) => double.IsInfinity(available) ? ColumnMaxWidth : Math.Min(ColumnMaxWidth, available);
+
+    protected override global::Windows.Foundation.Size MeasureOverride(global::Windows.Foundation.Size availableSize)
+    {
+        var width = ColumnWidth(availableSize.Width);
+        double height = 0;
+        foreach (var child in Children)
+        {
+            child.Measure(new global::Windows.Foundation.Size(width, availableSize.Height));
+            height = Math.Max(height, child.DesiredSize.Height);
+        }
+        return new global::Windows.Foundation.Size(double.IsInfinity(availableSize.Width) ? width : availableSize.Width, height);
+    }
+
+    protected override global::Windows.Foundation.Size ArrangeOverride(global::Windows.Foundation.Size finalSize)
+    {
+        var width = ColumnWidth(finalSize.Width);
+        foreach (var child in Children)
+            child.Arrange(new global::Windows.Foundation.Rect((finalSize.Width - width) / 2, 0, width, finalSize.Height));
+        return finalSize;
+    }
 }
 
 /// <summary>

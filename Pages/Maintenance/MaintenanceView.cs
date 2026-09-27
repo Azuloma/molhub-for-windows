@@ -68,15 +68,10 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
         list.Children.Add(_loadMore);
         _list = list;
 
-        var root = new StackPanel { Spacing = 16, Padding = new Thickness(32, 28, 32, 32), MaxWidth = 960, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var root = new StackPanel { Spacing = 16, Padding = new Thickness(32, 28, 32, 32) };
         root.Children.Add(_statusBar);
         root.Children.Add(_body);
-        _scroll = new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = root
-        };
+        _scroll = PageParts.CenteredPage(root, 960);
         Content = _scroll;
     }
 

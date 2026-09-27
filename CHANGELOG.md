@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.14.4
+
+- Fixed Profile settings being pushed to the right and cut off in wide windows: the page column is now centered at up to 960 px. Server maintenance and Project management (up to 960 px) and Dashboard, Projects and Commit history (up to 1280 px) use the same centering, so they no longer shift when their content is short.
+
+## v0.14.3
+
+- "Sign in again" on any page (after the session ended) is no longer refused while a change is still being sent; it waits for that change to finish and then signs out, like the sign-out after a password change. Sign out from the account menu is still blocked until the change finishes.
+
+## v0.14.2
+
+- Added native **Profile settings**: your username and role, and two cards. **Profile** lets you choose an image for your icon — any PNG, JPEG, BMP, GIF, TIFF or WebP up to 20 MB is automatically converted to a PNG of up to 128 × 128 pixels and 32 KB — shows a preview that is not saved yet, and Save or Cancel it; **Remove icon** asks for confirmation first. **Change password** takes your current and a new password (12–128 characters), warns that every device including this one will be signed out, and asks for confirmation before sending.
+- Saving a new icon updates it everywhere it is shown (title bar, account menu, Projects) without reloading the app. Changing your password signs the app out once the change is confirmed by the server; if the result can't be confirmed, the app still signs out and explains that your previous password may still be valid, and the change is never sent twice.
+- Sign out is now blocked while any change (icon, password or elsewhere) is still being sent, so it can't interrupt a write in flight.
+- Nothing beyond username, role and the icon is shown; there is still no session/device list, and Administration remains a placeholder.
+
 ## v0.14.1
 
 - Projects: a project that is already open reloads when you return to it after a change on another page (for example a work reservation released in Project management), instead of showing the old reservation until Refresh.

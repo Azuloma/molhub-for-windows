@@ -18,7 +18,14 @@ public sealed class WriteGate
         return true;
     }
 
-    public void Exit() => InFlight = false;
+    /// <summary>Raised after every <see cref="Exit"/>, once the gate is free again (the sign-out after a password change waits for it).</summary>
+    public event Action? Released;
+
+    public void Exit()
+    {
+        InFlight = false;
+        Released?.Invoke();
+    }
 }
 
 /// <summary>What the user typed into the publish form.</summary>

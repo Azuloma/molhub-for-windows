@@ -26,7 +26,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
 
     private readonly ProjectsRoot _root;
     private readonly PageParts _p;
-    private readonly AuthenticatedUser _user;
+    // The signed-in account as MainWindow knows it now (Profile settings can change the icon).
+    private readonly Func<AuthenticatedUser> _currentUser;
     private readonly string _language;
     private readonly Func<string, JsonObject?, Task<BridgeResult>> _request;
     private readonly Action _signInAgain;
@@ -48,14 +49,15 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
     private DateTimeOffset _listLoadedAt;
     private StackPanel? _projectRows;
     private Button? _loadMoreProjects;
+    private PersonPicture? _selfAvatar;
 
-    public ProjectsView(Func<string, string> localize, AuthenticatedUser user, string language,
+    public ProjectsView(Func<string, string> localize, Func<AuthenticatedUser> user, string language,
         Func<string, JsonObject?, Task<BridgeResult>> request, Action signInAgain, Action navigationChanged,
         ProjectsRoot firstScreen = ProjectsRoot.List, Action? workChanged = null, WriteGate? writeGate = null)
     {
         _root = firstScreen;
         _p = new PageParts(localize);
-        _user = user;
+        _currentUser = user;
         _language = language;
         _request = request;
         _signInAgain = signInAgain;
@@ -67,16 +69,11 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
 
         AutomationProperties.SetName(_breadcrumb, L("Projects_Breadcrumb"));
         _breadcrumb.ItemClicked += (_, e) => PopTo(e.Index);
-        var root = new StackPanel { Spacing = 16, Padding = new Thickness(32, 20, 32, 32), MaxWidth = 1280 };
+        var root = new StackPanel { Spacing = 16, Padding = new Thickness(32, 20, 32, 32) };
         root.Children.Add(_breadcrumb);
         root.Children.Add(_statusBar);
         root.Children.Add(_body);
-        _scroll = new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = root
-        };
+        _scroll = PageParts.CenteredPage(root, 1280);
         Content = _scroll;
         SizeChanged += (_, e) => Current?.Layout?.Apply(e.NewSize.Width);
     }
@@ -109,6 +106,16 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
     }
 
     private Screen? Current => _stack.Count > 0 ? _stack[^1] : null;
+
+    private AuthenticatedUser _user => _currentUser();
+
+    /// <summary>The signed-in account's icon changed (Profile settings): the profile column shows the new one at once.</summary>
+    public void UserChanged()
+    {
+        if (_selfAvatar is null) return;
+        if (_user.AvatarPng is { Length: > 0 } avatar) AvatarImage.Attach(_selfAvatar, avatar, 192);
+        else AvatarImage.Clear(_selfAvatar);
+    }
 
     public bool CanGoBack => _stack.Count > 1;
 
@@ -301,7 +308,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
     private (FrameworkElement, TwoColumnLayout) BuildListContent()
     {
         var side = new StackPanel { Spacing = 12 };
-        side.Children.Add(PageParts.Avatar(_user.Username, _user.AvatarPng, 96));
+        _selfAvatar = PageParts.Avatar(_user.Username, _user.AvatarPng, 96);
+        side.Children.Add(_selfAvatar);
         var name = PageParts.Heading(_user.Username, AutomationHeadingLevel.None, "SubtitleTextBlockStyle");
         side.Children.Add(name);
         side.Children.Add(_p.Secondary(L(UserRoleKey())));

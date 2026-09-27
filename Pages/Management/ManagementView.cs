@@ -84,18 +84,13 @@ internal sealed class ManagementView : UserControl
         content.Children.Add(_detail);
         _content = content;
 
-        var root = new StackPanel { Spacing = 16, Padding = new Thickness(32, 28, 32, 32), MaxWidth = 960, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var root = new StackPanel { Spacing = 16, Padding = new Thickness(32, 28, 32, 32) };
         root.Children.Add(title);
         root.Children.Add(_p.Secondary(L("Manage_Intro")));
         root.Children.Add(_statusBar);
         root.Children.Add(_busy);
         root.Children.Add(_body);
-        Content = new ScrollViewer
-        {
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = root
-        };
+        Content = PageParts.CenteredPage(root, 960);
     }
 
     private string L(string key) => _p.L(key);

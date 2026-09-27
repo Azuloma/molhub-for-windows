@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using FusionLedger.Windows;
 
@@ -126,7 +127,7 @@ Assert(versionCode.Contains("RuntimeInformation.ProcessArchitecture", StringComp
     && versionCode.Contains("GetAvailableBrowserVersionString", StringComparison.Ordinal)
     && versionCode.Contains("WindowsAppSdkVersion", StringComparison.Ordinal)
     && !versionCode.Contains("typeof(Microsoft.UI.Xaml.Application).Assembly.GetName().Version", StringComparison.Ordinal)
-    && !versionCode.Contains("0.14.1", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
+    && !versionCode.Contains("0.14.4", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
 Assert(loginXaml.Contains("WebView2", StringComparison.Ordinal) && loginCode.Contains("CoreWebView2", StringComparison.Ordinal), "Only LoginWindow may host WebView2.");
 Assert(loginXaml.Contains("x:Name=\"RootGrid\"", StringComparison.Ordinal)
     && loginCode.Contains("ThemeService.ReadSavedPreference", StringComparison.Ordinal)
@@ -163,10 +164,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.1</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.1.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.1.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.1.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.1", StringComparison.Ordinal)
-    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.14.1", StringComparison.Ordinal), "Version documentation must be updated.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.4</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.4.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.4.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.4.");
+var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.4", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.4", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.4", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.3", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.4 above v0.14.3 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -821,4 +824,293 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
     Assert(!resource.Contains("publish from MolHub on the web", StringComparison.Ordinal), $"The owner hint must no longer say publishing is web-only: {locale}");
 }
 
-Console.WriteLine("v0.14.1 native shell, dashboard, work writes, commit history, project management, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+// ----- Profile settings (v0.14.2): icon and password writes -----
+static byte[] PngHeader(int width, int height, int totalBytes, byte[]? signature = null, uint ihdrLength = 13, string chunkType = "IHDR")
+{
+    var bytes = new byte[totalBytes];
+    ReadOnlySpan<byte> sig = signature ?? new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 };
+    sig.CopyTo(bytes);
+    BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(8, 4), ihdrLength);
+    Encoding.ASCII.GetBytes(chunkType).CopyTo(bytes, 12);
+    BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(16, 4), (uint)width);
+    BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(20, 4), (uint)height);
+    return bytes;
+}
+
+// Parse: required fields, role default, avatar bounds, createdAt optional.
+Assert(ProfileModel.Parse(Json("""{"username":"x","status":"approved"}""")) is null
+    && ProfileModel.Parse(Json("""{"id":"u1","status":"approved"}""")) is null
+    && ProfileModel.Parse(Json("""{"id":"u1","username":"x"}""")) is null
+    && ProfileModel.Parse(Json("[]")) is null,
+    "Profile parsing must require id, username and status; unexpected shapes must not render.");
+Assert(ProfileModel.Parse(Json("""{"id":"u1","username":"x","status":"approved"}""")) is { Role: "member", CreatedAt: null, Avatar: null },
+    "A missing role must default to member, like the server DTO, and createdAt/avatar are optional.");
+var validSmallPng = PngHeader(1, 1, 33);
+var validLargePng = PngHeader(128, 128, 100);
+Assert(ProfileModel.IsAcceptableAvatar(validSmallPng) && ProfileModel.IsAcceptableAvatar(validLargePng),
+    "A 1x1 and a 128x128 PNG header must both be acceptable icon sizes.");
+var profileJson = Json($$"""{"id":"u1","username":"  Azunel  ","status":"Approved","role":"Admin","avatar":"{{ProfileModel.ToDataUrl(validSmallPng)}}","createdAt":"2026-09-01T00:00:00.000Z"}""");
+var profileInfo = ProfileModel.Parse(profileJson);
+Assert(profileInfo is { Id: "u1", Username: "Azunel", Status: "approved", Role: "admin" } && profileInfo.CreatedAt is not null
+    && profileInfo.Avatar is not null && profileInfo.Avatar.SequenceEqual(validSmallPng),
+    "Username must be trimmed, status/role lower-cased, and a valid avatar/createdAt parsed from the DTO.");
+Assert(ProfileModel.Parse(Json("""{"id":"u1","username":"x","status":"approved","avatar":"data:image/png;base64,AAAA"}""")) is { Avatar: null }
+    && ProfileModel.Parse(Json("""{"id":"u1","username":"x","status":"approved","avatar":null}""")) is { Avatar: null }
+    && ProfileModel.Parse(Json("""{"id":"u1","username":"x","status":"approved","createdAt":"not-a-date"}""")) is { CreatedAt: null },
+    "An unusable avatar or date must be dropped instead of failing the whole profile.");
+
+// IsAcceptableAvatar: signature, IHDR, dimensions and byte-length bounds.
+Assert(!ProfileModel.IsAcceptableAvatar(PngHeader(0, 10, 40)) && !ProfileModel.IsAcceptableAvatar(PngHeader(129, 10, 40))
+    && !ProfileModel.IsAcceptableAvatar(PngHeader(10, 0, 40)) && !ProfileModel.IsAcceptableAvatar(PngHeader(10, 129, 40)),
+    "Icon width/height of 0 or over 128 must be rejected.");
+Assert(!ProfileModel.IsAcceptableAvatar(PngHeader(10, 10, 40, signature: new byte[] { 0, 80, 78, 71, 13, 10, 26, 10 }))
+    && !ProfileModel.IsAcceptableAvatar(PngHeader(10, 10, 40, ihdrLength: 10))
+    && !ProfileModel.IsAcceptableAvatar(PngHeader(10, 10, 40, chunkType: "IDAT")),
+    "A wrong PNG signature, IHDR length or chunk type must be rejected.");
+Assert(!ProfileModel.IsAcceptableAvatar(PngHeader(10, 10, 32)) && !ProfileModel.IsAcceptableAvatar(PngHeader(10, 10, 32_769)) && !ProfileModel.IsAcceptableAvatar(null),
+    "32 bytes is below the 33-byte minimum and 32,769 is above the 32,768-byte maximum.");
+Assert(ProfileModel.IsAcceptableDataUrl(ProfileModel.ToDataUrl(validSmallPng)) && !ProfileModel.IsAcceptableDataUrl("data:image/png;base64," + new string('A', 43_692))
+    && !ProfileModel.IsAcceptableDataUrl(ProfileModel.PngDataPrefix + "not*base64!")
+    && !ProfileModel.IsAcceptableDataUrl("data:image/jpeg;base64,QQ==") && !ProfileModel.IsAcceptableDataUrl(null),
+    "The data URL prefix, character set and the 43,714-character length must all be checked before decoding.");
+var nullAvatarPayload = ProfileModel.AvatarPayload(null)!;
+Assert(nullAvatarPayload.ContainsKey("avatar") && nullAvatarPayload["avatar"] is null && nullAvatarPayload.ToJsonString().Contains("\"avatar\":null", StringComparison.Ordinal)
+    && ProfileModel.AvatarPayload(ProfileModel.ToDataUrl(validSmallPng)) is not null && ProfileModel.AvatarPayload("data:image/png;base64,not-valid") is null,
+    "Removing the icon must send an explicit avatar:null; only an acceptable data URL is otherwise sent.");
+
+// Password validation and payload shape.
+Assert(ProfileModel.ValidatePasswords(new string('a', 11), new string('b', 12)) == PasswordFieldError.CurrentLength
+    && ProfileModel.ValidatePasswords(new string('a', 12), new string('b', 11)) == PasswordFieldError.NewLength
+    && ProfileModel.ValidatePasswords(new string('a', 12), new string('b', 128)) == PasswordFieldError.None
+    && ProfileModel.ValidatePasswords(new string('a', 128), new string('b', 129)) == PasswordFieldError.NewLength
+    && ProfileModel.ValidatePasswords(new string('a', 129), new string('b', 5)) == (PasswordFieldError.CurrentLength | PasswordFieldError.NewLength),
+    "Passwords under 12 or over 128 characters must be flagged per field, at both boundaries.");
+var pwFlagged = PasswordFieldError.CurrentLength | PasswordFieldError.NewLength;
+Assert(ProfileModel.StillShown(pwFlagged, PasswordFieldError.None) == PasswordFieldError.None
+    && ProfileModel.StillShown(pwFlagged, PasswordFieldError.CurrentLength) == PasswordFieldError.CurrentLength
+    && ProfileModel.StillShown(PasswordFieldError.None, PasswordFieldError.CurrentLength) == PasswordFieldError.None,
+    "After a failed password save, a flagged field keeps its error until valid; an unflagged field gets no new error.");
+Assert(ProfileModel.PasswordPayload(new string('a', 12), new string('b', 128)) is { } minMaxPayload
+    && minMaxPayload["current"]!.GetValue<string>().Length == 12 && minMaxPayload["password"]!.GetValue<string>().Length == 128
+    && ProfileModel.PasswordPayload(new string('a', 11), new string('b', 12)) is null
+    && ProfileModel.PasswordPayload(new string('a', 12), new string('b', 129)) is null
+    && ProfileModel.PasswordPayload(new string('a', 129), new string('b', 12)) is null,
+    "Password payloads are built only within the 12-128 character bounds, at both edges.");
+Assert(ProfileModel.PasswordPayload(" abcdefghijkl ", "abcdefghijkl")!["current"]!.GetValue<string>() == " abcdefghijkl "
+    && ProfileModel.PasswordPayload(" abcdefghijkl ", "abcdefghijkl")!.Select(p => p.Key).SequenceEqual(new[] { "current", "password" }),
+    "Passwords must never be trimmed before sending, and the payload keys must be exactly current/password.");
+
+// Explain: LOGIN_FAILED vs. session-ended, Unknown per write, and each profile-specific error code.
+Assert(ProfileModel.Explain(Write(401, false, "LOGIN_FAILED", BridgeOutcome.Rejected), ProfileWrite.Password) is
+        { Kind: WriteOutcomeKind.Rejected, SessionEnded: false, MessageKey: "Profile_ErrorCurrentPassword" }
+    && ProfileModel.Explain(Write(401, false, "UNAUTHORIZED", BridgeOutcome.Rejected), ProfileWrite.Password) is { SessionEnded: true, MessageKey: "Work_ErrorSession" },
+    "A wrong current password (also a 401) must be told apart from an ended session, which is UNAUTHORIZED.");
+Assert(ProfileModel.Explain(BridgeResult.HostFailure("r", "TIMEOUT", false, BridgeOutcome.Unknown), ProfileWrite.Password).MessageKey == "Profile_PasswordUnknown"
+    && ProfileModel.Explain(BridgeResult.HostFailure("r", "TIMEOUT", false, BridgeOutcome.Unknown), ProfileWrite.Avatar).MessageKey == "Profile_AvatarUnknown"
+    && ProfileModel.Explain(Write(200, true, null, BridgeOutcome.Applied), ProfileWrite.Avatar).Kind == WriteOutcomeKind.Applied,
+    "An unknown outcome must warn with the write-specific message; applied results pass through unchanged.");
+Assert(ProfileModel.Explain(Write(400, false, "INVALID_AVATAR", BridgeOutcome.Rejected), ProfileWrite.Avatar).MessageKey == "Profile_ErrorInvalidAvatar"
+    && ProfileModel.Explain(BridgeResult.HostFailure("r", "TOO_LARGE", false, BridgeOutcome.Rejected), ProfileWrite.Avatar) is
+        { Kind: WriteOutcomeKind.NotSent, MessageKey: "Profile_ErrorInvalidAvatar" }
+    && ProfileModel.Explain(Write(400, false, "PASSWORD_LENGTH", BridgeOutcome.Rejected), ProfileWrite.Password).MessageKey == "Profile_ErrorPasswordLength"
+    && ProfileModel.Explain(Write(409, false, "PASSWORD_CHANGE_CONFLICT", BridgeOutcome.Rejected), ProfileWrite.Password).MessageKey == "Profile_ErrorPasswordConflict"
+    && ProfileModel.Explain(Write(429, false, "RATE_LIMIT", BridgeOutcome.Rejected), ProfileWrite.Password).MessageKey == "Profile_ErrorPasswordRateLimit",
+    "INVALID_AVATAR, PASSWORD_LENGTH, PASSWORD_CHANGE_CONFLICT and RATE_LIMIT must map to their own Profile messages.");
+
+// Bridge allowlist: profile is a read, updateAvatar/changePassword are writes.
+Assert(BridgePolicy.IsKnownCommand("profile") && !BridgePolicy.IsWrite("profile")
+    && BridgePolicy.IsWrite("updateAvatar") && BridgePolicy.IsWrite("changePassword"),
+    "profile must stay a read command; updateAvatar and changePassword must be allowlisted writes.");
+
+// Gating: unavailable for pending accounts, no longer the generic placeholder.
+Assert(!NativePageCatalog.IsAvailable(NativePage.ProfileSettings, pendingUser) && NativePageCatalog.IsAvailable(NativePage.ProfileSettings, approvedMember),
+    "Profile settings must stay unavailable to pending accounts and available once approved.");
+Assert(mainCode.Contains("if (page == NativePage.ProfileSettings) return CreateProfilePage();", StringComparison.Ordinal)
+    && mainCode.Contains("new ProfileView(L,", StringComparison.Ordinal),
+    "Profile settings must build the real ProfileView instead of falling through to the generic placeholder.");
+
+// Sign-out is blocked while a write is in flight, and only revokes the session through the bridge after that check.
+var signOutAsyncBody = mainCode[mainCode.IndexOf("private async Task SignOutAsync", StringComparison.Ordinal)..];
+var inFlightCheck = signOutAsyncBody.IndexOf("_writeGate.InFlight", StringComparison.Ordinal);
+var logoutRequest = signOutAsyncBody.IndexOf("RequestAsync(\"logout\")", StringComparison.Ordinal);
+Assert(inFlightCheck >= 0 && logoutRequest > inFlightCheck, "Sign-out must check the write gate before asking the bridge to log out.");
+
+// Source-level guarantees for the Profile settings write UI.
+var profileCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Profile", "ProfileView.cs"));
+var profileModelCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Profile", "ProfileModel.cs"));
+var avatarConverterCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Profile", "AvatarConverter.cs"));
+Assert(System.Text.RegularExpressions.Regex.Matches(profileCode, "_gate\\.TryEnter\\(\\)").Count == 2,
+    "Both the avatar and password writes must go through the shared WriteGate.");
+Assert(profileCode.Contains("new PasswordBox", StringComparison.Ordinal) && profileCode.Contains("MaxLength = ProfileModel.MaxPasswordLength", StringComparison.Ordinal)
+    && profileCode.Contains("PasswordField(L(\"Profile_CurrentPassword\"))", StringComparison.Ordinal),
+    "Password fields must use PasswordBox capped at the server's 128-character maximum.");
+Assert(System.Text.RegularExpressions.Regex.Matches(profileCode, "DefaultButton = ContentDialogButton\\.Close").Count >= 2,
+    "Confirmation and explanation dialogs must default to Close, not the destructive action.");
+var changePasswordBody = profileCode[profileCode.IndexOf("private async Task ChangePasswordAsync", StringComparison.Ordinal)..];
+Assert(changePasswordBody.Contains("payload.Clear();", StringComparison.Ordinal) && changePasswordBody.Contains("ClearPasswords();", StringComparison.Ordinal)
+    && changePasswordBody.IndexOf("_gate.Exit();", StringComparison.Ordinal) is var pwGateExit && pwGateExit >= 0
+    && changePasswordBody.IndexOf("_signOutAfterPasswordChange();", StringComparison.Ordinal) > pwGateExit,
+    "Passwords must be cleared right after sending, and sign-out must only follow after the write gate is released.");
+Assert(avatarCode.Contains("ConditionalWeakTable<PersonPicture, State>", StringComparison.Ordinal) && avatarCode.Contains("public static void Clear(PersonPicture picture)", StringComparison.Ordinal),
+    "AvatarImage must keep one state per picture and support clearing it back to initials.");
+Assert(avatarConverterCode.Contains("InitializeWithWindow.Initialize(picker, hwnd);", StringComparison.Ordinal)
+    && avatarConverterCode.Contains("properties.Size > MaxFileBytes) return null;", StringComparison.Ordinal),
+    "The avatar picker must be initialized with the app window and reject oversized files before decoding.");
+var profileKeys = System.Text.RegularExpressions.Regex.Matches(profileCode + profileModelCode, "\"(Profile_[A-Za-z0-9]+)\"").Select(m => m.Groups[1].Value)
+    .Concat(new[] { "Page_Profile settings" }).Distinct().ToList();
+Assert(profileKeys.Count >= 30, "Profile settings strings must be found in the source.");
+foreach (var locale in new[] { "en-US", "ja-JP" })
+{
+    var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
+    foreach (var key in profileKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing profile string {key} in {locale}");
+}
+
+// ----- WriteGate.Released (fixed after review) -----
+var releaseGate = new WriteGate();
+var releasedCount = 0;
+var inFlightInsideHandler = true;
+releaseGate.Released += () => { releasedCount++; inFlightInsideHandler = releaseGate.InFlight; };
+Assert(releaseGate.TryEnter() && !releaseGate.TryEnter() && releasedCount == 0, "A refused TryEnter (gate already busy) must not raise Released.");
+releaseGate.Exit();
+Assert(releasedCount == 1 && !inFlightInsideHandler, "Exit() must raise Released exactly once, with InFlight already false inside the handler.");
+releaseGate.Exit();
+Assert(releasedCount == 2, "Released must fire on every Exit(), including one with no waiting write.");
+
+// ----- Sign-out when the session already ended (password change, "Sign in again") waits for the gate instead of showing the blocked dialog -----
+var signOutWhenWritesFinishBody = mainCode[mainCode.IndexOf("private void SignOutWhenWritesFinish", StringComparison.Ordinal)..
+    mainCode.IndexOf("private void SignOutWhenGateFree", StringComparison.Ordinal)];
+Assert(signOutWhenWritesFinishBody.Contains("_writeGate.Released += SignOutWhenGateFree;", StringComparison.Ordinal)
+    && !signOutWhenWritesFinishBody.Contains("ShowSignOutBlockedAsync", StringComparison.Ordinal),
+    "A sign-out after the session ended must wait for the write gate to free up, never show the 'another change is being sent' dialog.");
+Assert(signOutWhenWritesFinishBody.Contains("if (_signOutWhenGateFree) return;", StringComparison.Ordinal)
+    && signOutWhenWritesFinishBody.Contains("_ = SignOutAsync();", StringComparison.Ordinal),
+    "The deferred sign-out must subscribe only once, and sign out directly when no write is in flight.");
+Assert(mainCode.Contains("private void SignOutWhenGateFree", StringComparison.Ordinal)
+    && mainCode.Contains("_writeGate.Released -= SignOutWhenGateFree;", StringComparison.Ordinal)
+    && !mainCode.Contains("SignOutAfterPasswordChange", StringComparison.Ordinal),
+    "The queued sign-out must unsubscribe once it runs; the old SignOutAfterPasswordChange name must be gone.");
+var signOutWhenGateFreeStart = mainCode.IndexOf("private void SignOutWhenGateFree", StringComparison.Ordinal);
+var signOutWhenGateFreeBody = mainCode[signOutWhenGateFreeStart..mainCode.IndexOf("private async Task ShowSignOutBlockedAsync", signOutWhenGateFreeStart, StringComparison.Ordinal)];
+Assert(signOutWhenGateFreeBody.Contains("_writeGate.Released -= SignOutWhenGateFree;", StringComparison.Ordinal)
+    && signOutWhenGateFreeBody.Contains("_signOutWhenGateFree = false;", StringComparison.Ordinal)
+    && signOutWhenGateFreeBody.Contains("if (!DispatcherQueue.TryEnqueue(SignOutWhenWritesFinish)) SignOutWhenWritesFinish();", StringComparison.Ordinal)
+    && !signOutWhenGateFreeBody.Contains("SignOutAsync", StringComparison.Ordinal),
+    "Released fires inside the finishing write's finally, so the queued sign-out must unsubscribe, reset its flag and queue SignOutWhenWritesFinish (re-checking the gate, direct call if TryEnqueue fails), never SignOutAsync.");
+// Every page's "Sign in again" (session already ended on the server) uses SignOutWhenWritesFinish, never the refusing path.
+Assert(!mainCode.Contains("() => _ = SignOutAsync()", StringComparison.Ordinal),
+    "No page may be wired with () => _ = SignOutAsync(); 'Sign in again' must use SignOutWhenWritesFinish.");
+foreach (var (signInFactory, signInNext) in new[]
+{
+    ("private FrameworkElement CreateDashboardPage", "private FrameworkElement CreateProjectsPage"),
+    ("private FrameworkElement CreateProjectsPage", "private FrameworkElement CreateCommitHistoryPage"),
+    ("private FrameworkElement CreateCommitHistoryPage", "private FrameworkElement CreateApprovalPage"),
+    ("private FrameworkElement CreateApprovalPage", "private FrameworkElement CreateManagementPage"),
+    ("private FrameworkElement CreateManagementPage", "private FrameworkElement CreateProfilePage"),
+    ("private FrameworkElement CreateProfilePage", "private FrameworkElement CreateMaintenancePage"),
+})
+{
+    var signInStart = mainCode.IndexOf(signInFactory, StringComparison.Ordinal);
+    var signInEnd = mainCode.IndexOf(signInNext, StringComparison.Ordinal);
+    Assert(signInStart >= 0 && signInEnd > signInStart && mainCode[signInStart..signInEnd].Contains("SignOutWhenWritesFinish", StringComparison.Ordinal)
+        && !mainCode[signInStart..signInEnd].Contains("SignOutAsync", StringComparison.Ordinal),
+        $"{signInFactory} must wire 'Sign in again' to SignOutWhenWritesFinish, not SignOutAsync.");
+}
+var maintenanceFactoryStart = mainCode.IndexOf("private FrameworkElement CreateMaintenancePage", StringComparison.Ordinal);
+var maintenanceFactory = mainCode[maintenanceFactoryStart..mainCode.IndexOf("return _maintenance;", maintenanceFactoryStart, StringComparison.Ordinal)];
+Assert(maintenanceFactory.Contains("SignOutWhenWritesFinish", StringComparison.Ordinal) && !maintenanceFactory.Contains("SignOutAsync", StringComparison.Ordinal),
+    "CreateMaintenancePage must wire 'Sign in again' to SignOutWhenWritesFinish, not SignOutAsync.");
+var profileFactoryStart = mainCode.IndexOf("private FrameworkElement CreateProfilePage", StringComparison.Ordinal);
+var profileFactory = mainCode[profileFactoryStart..mainCode.IndexOf("private FrameworkElement CreateMaintenancePage", StringComparison.Ordinal)];
+Assert(System.Text.RegularExpressions.Regex.Matches(profileFactory, "SignOutWhenWritesFinish").Count == 2,
+    "ProfileView must get SignOutWhenWritesFinish for both its sign-in-again and sign-out-after-password-change callbacks.");
+// The account menu's own Sign out still refuses (explains) while a write is in flight.
+var signOutClickBody = mainCode[mainCode.IndexOf("private async void SignOut_Click", StringComparison.Ordinal)..mainCode.IndexOf("private async Task SignOutAsync", StringComparison.Ordinal)];
+Assert(signOutClickBody.Contains("await SignOutAsync();", StringComparison.Ordinal) && !signOutClickBody.Contains("SignOutWhenWritesFinish", StringComparison.Ordinal),
+    "The account-menu Sign out must go through SignOutAsync, not the deferred path.");
+var signOutAsyncOnly = mainCode[mainCode.IndexOf("private async Task SignOutAsync", StringComparison.Ordinal)..mainCode.IndexOf("private void SignOutWhenWritesFinish", StringComparison.Ordinal)];
+Assert(signOutAsyncOnly.Contains("if (_writeGate.InFlight)", StringComparison.Ordinal)
+    && signOutAsyncOnly.IndexOf("await ShowSignOutBlockedAsync();", StringComparison.Ordinal) > signOutAsyncOnly.IndexOf("if (_writeGate.InFlight)", StringComparison.Ordinal)
+    && signOutAsyncOnly.IndexOf("_signingOut = true;", StringComparison.Ordinal) > signOutAsyncOnly.IndexOf("await ShowSignOutBlockedAsync();", StringComparison.Ordinal),
+    "SignOutAsync must still refuse with ShowSignOutBlockedAsync while a write is in flight, before starting the sign-out.");
+
+// ----- ProfileView: a write's own reload is exempt from the write-in-progress guard, and the icon change always reaches MainWindow -----
+Assert(profileCode.Contains("if (_writing && !partOfWrite) return false;", StringComparison.Ordinal),
+    "A plain load (navigation/Retry) must be refused while a write is sending; only the write's own reload may proceed.");
+Assert(System.Text.RegularExpressions.Regex.Matches(profileCode, "LoadAsync\\(partOfWrite: true\\)").Count == 2,
+    "Both the Applied and Unknown avatar-write branches must reload with partOfWrite: true.");
+Assert(profileCode.Contains("_avatarChanged(shown ? _profile?.Avatar : png);", StringComparison.Ordinal),
+    "After an Applied icon write, MainWindow must always learn the resulting icon (the sent PNG when the profile could not be re-read).");
+
+// ----- Centered page column (v0.14.4): width from layout via PageParts.CenteredPage/CenteredColumnPanel, never Stretch + MaxWidth on the page root -----
+// Slices [start marker, end marker) and fails the assertion (instead of throwing) when a marker is missing.
+static string SliceBetween(string text, string startMarker, string endMarker, string what)
+{
+    var sliceStart = text.IndexOf(startMarker, StringComparison.Ordinal);
+    var sliceEnd = sliceStart < 0 ? -1 : text.IndexOf(endMarker, sliceStart + startMarker.Length, StringComparison.Ordinal);
+    Assert(sliceStart >= 0 && sliceEnd >= 0, $"{what}: marker not found ('{(sliceStart < 0 ? startMarker : endMarker)}').");
+    return text[sliceStart..sliceEnd];
+}
+var pagePartsCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Common", "PageParts.cs"));
+var centeredPageBody = SliceBetween(pagePartsCode, "public static ScrollViewer CenteredPage(FrameworkElement column, double maxWidth)", "\n    }", "PageParts.CenteredPage");
+Assert(System.Text.RegularExpressions.Regex.IsMatch(centeredPageBody, @"new CenteredColumnPanel\s*\{\s*ColumnMaxWidth = maxWidth\s*\}")
+    && centeredPageBody.Contains("Children.Add(column);", StringComparison.Ordinal)
+    && centeredPageBody.Contains("new ScrollViewer", StringComparison.Ordinal)
+    && centeredPageBody.Contains("HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled", StringComparison.Ordinal)
+    && centeredPageBody.Contains("VerticalScrollBarVisibility = ScrollBarVisibility.Auto", StringComparison.Ordinal)
+    && centeredPageBody.Contains("Content = host", StringComparison.Ordinal),
+    "CenteredPage must host the column in a CenteredColumnPanel capped at maxWidth, inside a vertical-only ScrollViewer.");
+Assert(!centeredPageBody.Contains("SizeChanged", StringComparison.Ordinal)
+    && !centeredPageBody.Contains("column.Width", StringComparison.Ordinal)
+    && !centeredPageBody.Contains("HorizontalAlignment.Stretch", StringComparison.Ordinal)
+    && !System.Text.RegularExpressions.Regex.IsMatch(centeredPageBody, @"\bMaxWidth\s*="),
+    "The column width must come from layout (the viewport), never from a SizeChanged handler or Stretch + MaxWidth.");
+var centeredPanelCode = SliceBetween(pagePartsCode, "internal sealed class CenteredColumnPanel : Panel", "internal sealed class InlineWrapPanel", "CenteredColumnPanel");
+var centeredMeasure = SliceBetween(centeredPanelCode, "MeasureOverride(", "ArrangeOverride(", "CenteredColumnPanel.MeasureOverride");
+var centeredArrangeStart = centeredPanelCode.IndexOf("ArrangeOverride(", StringComparison.Ordinal);
+var centeredArrange = centeredArrangeStart < 0 ? "" : centeredPanelCode[centeredArrangeStart..];
+Assert(centeredPanelCode.Contains("public double ColumnMaxWidth", StringComparison.Ordinal)
+    && System.Text.RegularExpressions.Regex.IsMatch(centeredPanelCode, @"double\.IsInfinity\(available\)\s*\?\s*ColumnMaxWidth\s*:\s*Math\.Min\(ColumnMaxWidth, available\)"),
+    "CenteredColumnPanel's column width must be min(ColumnMaxWidth, available), and ColumnMaxWidth when the available width is infinite.");
+Assert(centeredMeasure.Contains("ColumnWidth(availableSize.Width)", StringComparison.Ordinal)
+    && centeredMeasure.Contains("child.Measure(new global::Windows.Foundation.Size(width,", StringComparison.Ordinal),
+    "MeasureOverride must measure each child at the capped column width.");
+Assert(centeredArrange.Contains("ColumnWidth(finalSize.Width)", StringComparison.Ordinal)
+    && centeredArrange.Contains("(finalSize.Width - width) / 2", StringComparison.Ordinal)
+    && System.Text.RegularExpressions.Regex.IsMatch(centeredArrange, @"child\.Arrange\(new global::Windows\.Foundation\.Rect\(\(finalSize\.Width - width\) / 2, 0, width,"),
+    "ArrangeOverride must center each child at x = (finalSize.Width - width) / 2 with the capped width.");
+foreach (var (centeredView, centeredCall) in new[]
+{
+    (Path.Combine("Profile", "ProfileView.cs"), "PageParts.CenteredPage(root, 960)"),
+    (Path.Combine("Maintenance", "MaintenanceView.cs"), "PageParts.CenteredPage(root, 960)"),
+    (Path.Combine("Management", "ManagementView.cs"), "PageParts.CenteredPage(root, 960)"),
+    (Path.Combine("Dashboard", "DashboardView.cs"), "PageParts.CenteredPage(root, 1280)"),
+    (Path.Combine("Projects", "ProjectsView.cs"), "PageParts.CenteredPage(root, 1280)"),
+})
+{
+    var centeredViewCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", centeredView));
+    Assert(centeredViewCode.Contains(centeredCall, StringComparison.Ordinal),
+        $"{centeredView} must build its page column with {centeredCall}.");
+}
+// No object initializer under Pages/ may combine HorizontalAlignment.Stretch with MaxWidth (single- or multi-line initializer),
+// and a panel (StackPanel/Grid) with MaxWidth must say Left or Center explicitly: the default alignment is Stretch.
+foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Pages"), "*.cs", SearchOption.AllDirectories))
+{
+    var pageSource = File.ReadAllText(pageSourceFile);
+    foreach (System.Text.RegularExpressions.Match initializer in System.Text.RegularExpressions.Regex.Matches(pageSource, @"new\s+([A-Za-z_][A-Za-z0-9_.<>]*)\s*(\([^()]*\))?\s*\{[^{}]*\}"))
+    {
+        var hasMaxWidth = System.Text.RegularExpressions.Regex.IsMatch(initializer.Value, @"\bMaxWidth\s*=");
+        Assert(!(hasMaxWidth && initializer.Value.Contains("HorizontalAlignment.Stretch", StringComparison.Ordinal)),
+            $"{Path.GetFileName(pageSourceFile)} combines HorizontalAlignment.Stretch with MaxWidth; use PageParts.CenteredPage(root, maxWidth) instead.");
+        var initializerType = initializer.Groups[1].Value;
+        Assert(!(hasMaxWidth && (initializerType == "StackPanel" || initializerType == "Grid")
+                && !initializer.Value.Contains("HorizontalAlignment.Left", StringComparison.Ordinal)
+                && !initializer.Value.Contains("HorizontalAlignment.Center", StringComparison.Ordinal)),
+            $"{Path.GetFileName(pageSourceFile)} has a {initializerType} with MaxWidth and the default (Stretch) alignment; use PageParts.CenteredPage(root, maxWidth) or an explicit Left/Center alignment.");
+    }
+    Assert(!System.Text.RegularExpressions.Regex.IsMatch(pageSource, @"\broot\.MaxWidth\s*="),
+        $"{Path.GetFileName(pageSourceFile)} must not set MaxWidth on the page root after construction; use PageParts.CenteredPage(root, maxWidth).");
+    Assert(!pageSource.Contains("MaxWidth = 960, HorizontalAlignment = HorizontalAlignment.Stretch", StringComparison.Ordinal),
+        $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
+}
+
+Console.WriteLine("v0.14.4 native shell, dashboard, work writes, commit history, project management, profile settings, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
