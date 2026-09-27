@@ -96,6 +96,29 @@ public static class WorkModel
         return errors;
     }
 
+    private static readonly PublishFieldError[] FieldGroups =
+    {
+        PublishFieldError.TitleMissing | PublishFieldError.TitleTooLong,
+        PublishFieldError.VersionInvalid,
+        // The size error is shown under Changes, where most of the text is.
+        PublishFieldError.ChangesMissing | PublishFieldError.ChangesTooLong | PublishFieldError.TooLarge,
+        PublishFieldError.UrlMissing | PublishFieldError.UrlInvalid
+    };
+
+    /// <summary>
+    /// The errors to keep showing while the user edits after a failed publish: a flagged field shows its current error and
+    /// clears once it is valid; a field that was not flagged gets no new error until the next Publish.
+    /// </summary>
+    public static PublishFieldError StillShown(PublishFieldError shown, PublishFieldError current)
+    {
+        var result = PublishFieldError.None;
+        foreach (var group in FieldGroups)
+        {
+            if ((shown & group) != PublishFieldError.None) result |= current & group;
+        }
+        return result;
+    }
+
     /// <summary>The publish request; `base` must be the caller's reservation base (which the server also checks against the head).</summary>
     public static JsonObject? PublishPayload(string projectId, string? reservationBase, PublishDraft draft)
     {

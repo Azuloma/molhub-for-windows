@@ -202,6 +202,15 @@ internal sealed partial class ProjectsView
         }
     }
 
+    /// <summary>Closes the "Check the form" notice once the form is valid; any other notice shown since then stays.</summary>
+    private void CloseFormNotice()
+    {
+        if (_pendingWriteNotice is { } pending && pending.Title == L("Work_FormInvalidTitle")) _pendingWriteNotice = null;
+        if (!_statusBar.IsOpen || _statusBar.Title != L("Work_FormInvalidTitle") || _statusBar.Message != L("Work_FormInvalid")) return;
+        _statusBar.IsOpen = false;
+        _stickyNotice = false;
+    }
+
     private bool _stickyNotice;
     private (InfoBarSeverity Severity, string Title, string Message, bool SessionEnded)? _pendingWriteNotice;
 
@@ -303,6 +312,18 @@ internal sealed partial class ProjectsView
                 : errors.HasFlag(PublishFieldError.UrlInvalid) ? L("Work_ErrorInvalidUrl") : null;
         }
 
+        // After a failed Publish, flagged fields are re-checked as the user edits, so fixed fields lose their error and the
+        // form notice closes once nothing is flagged (a field that was fine gets no new error until the next Publish).
+        var shownErrors = PublishFieldError.None;
+        void Recheck()
+        {
+            if (shownErrors == PublishFieldError.None) return;
+            shownErrors = WorkModel.StillShown(shownErrors, WorkModel.Validate(new PublishDraft(title.Text, version.Text, changes.Text, url.Text)));
+            ShowFieldErrors(shownErrors);
+            if (shownErrors == PublishFieldError.None) CloseFormNotice();
+        }
+        foreach (var box in new[] { title, version, changes, url }) box.TextChanged += (_, _) => Recheck();
+
         void SetBusy(bool value)
         {
             foreach (var control in new Control[] { title, version, changes, url, publish, cancel }) control.IsEnabled = !value;
@@ -320,6 +341,7 @@ internal sealed partial class ProjectsView
             var draft = new PublishDraft(title.Text, version.Text, changes.Text, url.Text);
             var errors = WorkModel.Validate(draft);
             ShowFieldErrors(errors);
+            shownErrors = errors;
             if (errors != PublishFieldError.None)
             {
                 ShowWriteNotice(screen, InfoBarSeverity.Error, L("Work_FormInvalidTitle"), L("Work_FormInvalid"));

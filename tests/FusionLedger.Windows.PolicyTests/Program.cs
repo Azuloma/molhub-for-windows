@@ -126,7 +126,7 @@ Assert(versionCode.Contains("RuntimeInformation.ProcessArchitecture", StringComp
     && versionCode.Contains("GetAvailableBrowserVersionString", StringComparison.Ordinal)
     && versionCode.Contains("WindowsAppSdkVersion", StringComparison.Ordinal)
     && !versionCode.Contains("typeof(Microsoft.UI.Xaml.Application).Assembly.GetName().Version", StringComparison.Ordinal)
-    && !versionCode.Contains("0.13.0", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
+    && !versionCode.Contains("0.13.1", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
 Assert(loginXaml.Contains("WebView2", StringComparison.Ordinal) && loginCode.Contains("CoreWebView2", StringComparison.Ordinal), "Only LoginWindow may host WebView2.");
 Assert(loginXaml.Contains("x:Name=\"RootGrid\"", StringComparison.Ordinal)
     && loginCode.Contains("ThemeService.ReadSavedPreference", StringComparison.Ordinal)
@@ -163,10 +163,10 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.13.0</Version>", StringComparison.Ordinal), "Version source of truth must be v0.13.0.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.13.0.0\"", StringComparison.Ordinal), "Manifest version must be v0.13.0.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.13.0", StringComparison.Ordinal)
-    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.13.0", StringComparison.Ordinal), "Version documentation must be updated.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.13.1</Version>", StringComparison.Ordinal), "Version source of truth must be v0.13.1.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.13.1.0\"", StringComparison.Ordinal), "Manifest version must be v0.13.1.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.13.1", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.13.1", StringComparison.Ordinal), "Version documentation must be updated.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -677,6 +677,18 @@ Assert(WorkModel.Validate(new PublishDraft("", "a<b", "", "")) == (PublishFieldE
     && WorkModel.Validate(goodDraft with { Version = new string('v', 41) }) == PublishFieldError.VersionInvalid
     && WorkModel.Validate(goodDraft with { Version = "" }) == PublishFieldError.None,
     "The publish form uses the server limits: required title/changes/URL, http(s) without credentials, version ≤ 40 without < >.");
+var flagged = PublishFieldError.TitleMissing | PublishFieldError.UrlInvalid;
+Assert(WorkModel.StillShown(flagged, PublishFieldError.None) == PublishFieldError.None
+    && WorkModel.StillShown(flagged, PublishFieldError.UrlInvalid) == PublishFieldError.UrlInvalid
+    && WorkModel.StillShown(flagged, PublishFieldError.TitleTooLong | PublishFieldError.UrlMissing) == (PublishFieldError.TitleTooLong | PublishFieldError.UrlMissing)
+    && WorkModel.StillShown(flagged, PublishFieldError.ChangesMissing | PublishFieldError.VersionInvalid) == PublishFieldError.None
+    && WorkModel.StillShown(PublishFieldError.TooLarge, PublishFieldError.TooLarge) == PublishFieldError.TooLarge
+    && WorkModel.StillShown(PublishFieldError.None, PublishFieldError.TitleMissing) == PublishFieldError.None,
+    "After a failed publish, flagged fields clear once valid and fields that were fine get no new error until the next Publish.");
+var workViewSource = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Work.cs"));
+Assert(workViewSource.Contains("box.TextChanged += (_, _) => Recheck();", StringComparison.Ordinal)
+    && workViewSource.Contains("if (shownErrors == PublishFieldError.None) CloseFormNotice();", StringComparison.Ordinal),
+    "The publish form re-checks flagged fields while editing and closes the form notice once the form is valid.");
 BridgeResult Write(int status, bool ok, string? code, BridgeOutcome outcome, string? details = null) =>
     new("r", status, ok, null, null, code, details is null ? null : Json(details), false, outcome);
 Assert(WorkModel.Explain(Write(200, true, null, BridgeOutcome.Applied)).Kind == WriteOutcomeKind.Applied
@@ -734,4 +746,4 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
     Assert(!resource.Contains("publish from MolHub on the web", StringComparison.Ordinal), $"The owner hint must no longer say publishing is web-only: {locale}");
 }
 
-Console.WriteLine("v0.13.0 native shell, dashboard, work writes, commit history, project management, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.13.1 native shell, dashboard, work writes, commit history, project management, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

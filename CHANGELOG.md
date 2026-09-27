@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.13.1
+
+- Publish version form: after a failed check, a flagged field's error now clears as soon as the field is fixed, and the "Check the form" notice closes once every flagged field is valid. Fields that were fine get no new error while typing; they are checked again on the next Publish.
+
 ## v0.13.0
 
 - First native writes, on the project page's Work reservation card: **Start work** when the project is free (`startReservation`, from the current head), and **Publish version** and **Cancel work** when the reservation is yours (`cancelReservation`). The card also shows the web note that reservations do not lock local files.
