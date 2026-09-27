@@ -9,5 +9,4 @@ artifacts/
 .vs/
 BundleArtifacts/
 .claude_stuff/
-/CLAUDE.md
-.claude/
+.claude/settings.local.json
