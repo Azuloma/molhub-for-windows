@@ -15,9 +15,9 @@ internal enum ProjectsRoot
 }
 
 /// <summary>
-/// Read-only native Projects: the project list (`projects`), a project overview with its commits (`project`,
+/// Native Projects: the project list (`projects`), a project overview with its commits (`project`,
 /// `projectCommits`) and commit details (`commit`), navigated inside this page with a breadcrumb. It follows the web
-/// project pages; reservation, publishing and management actions are not rendered until they exist natively.
+/// project pages. The only writes are Start work / Cancel work / Publish version (`ProjectsView.Work.cs`); management actions are not rendered until they exist natively.
 /// The Commit history page is a second instance whose first screen is the personal history (`history`).
 /// </summary>
 internal sealed partial class ProjectsView : UserControl, IScreenStack
@@ -31,6 +31,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
     private readonly Func<string, JsonObject?, Task<BridgeResult>> _request;
     private readonly Action _signInAgain;
     private readonly Action _navigationChanged;
+    private readonly Action _workChanged;
+    private readonly WriteGate _gate;
     private readonly ScrollViewer _scroll;
     private readonly BreadcrumbBar _breadcrumb = new() { Visibility = Visibility.Collapsed };
     private readonly InfoBar _statusBar = new() { IsClosable = true, IsOpen = false };
@@ -49,7 +51,7 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
 
     public ProjectsView(Func<string, string> localize, AuthenticatedUser user, string language,
         Func<string, JsonObject?, Task<BridgeResult>> request, Action signInAgain, Action navigationChanged,
-        ProjectsRoot firstScreen = ProjectsRoot.List)
+        ProjectsRoot firstScreen = ProjectsRoot.List, Action? workChanged = null, WriteGate? writeGate = null)
     {
         _root = firstScreen;
         _p = new PageParts(localize);
@@ -58,6 +60,10 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         _request = request;
         _signInAgain = signInAgain;
         _navigationChanged = navigationChanged;
+        _workChanged = workChanged ?? (() => { });
+        _gate = writeGate ?? new WriteGate();
+        // A write warning or error stays until the user closes it (loading another screen does not hide it).
+        _statusBar.Closed += (_, _) => _stickyNotice = false;
 
         AutomationProperties.SetName(_breadcrumb, L("Projects_Breadcrumb"));
         _breadcrumb.ItemClicked += (_, e) => PopTo(e.Index);
@@ -80,7 +86,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         List,
         History,
         Project,
-        Commit
+        Commit,
+        Publish
     }
 
     private sealed class Screen(ScreenKind kind, string id, string title)
@@ -95,6 +102,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         /// <summary>Reloads data into the already built content (the history keeps its filters).</summary>
         public Func<Task>? Refresh { get; set; }
         public DateTimeOffset LoadedAt { get; set; }
+        /// <summary>Bumped by every load; an older reply that arrives later is dropped.</summary>
+        public int LoadGeneration { get; set; }
     }
 
     private Screen? Current => _stack.Count > 0 ? _stack[^1] : null;
@@ -159,13 +168,14 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
     private void ShowCurrent(bool scrollToTop = false)
     {
         if (Current is not { } screen) return;
-        _statusBar.IsOpen = false;
+        CloseStatusBar();
         UpdateBreadcrumb();
         _body.Content = screen.Content ?? _p.LoadingIndicator("Projects_Loading");
         screen.Layout?.Apply(ActualWidth);
         var offset = scrollToTop ? 0 : screen.ScrollOffset;
         DispatcherQueue.TryEnqueue(() => _scroll.ChangeView(null, offset, null, true));
         _navigationChanged();
+        ShowPendingWriteNotice();
     }
 
     private void UpdateBreadcrumb()
@@ -180,14 +190,21 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         screen.Content = content;
         screen.Layout = layout;
         if (Current != screen) return;
-        _statusBar.IsOpen = false;
+        CloseStatusBar();
         _body.Content = content;
         layout?.Apply(ActualWidth);
+    }
+
+    /// <summary>Hides the InfoBar unless it shows a write warning or error the user has not dismissed yet.</summary>
+    private void CloseStatusBar()
+    {
+        if (!_stickyNotice) _statusBar.IsOpen = false;
     }
 
     private void ShowError(Screen screen, ProjectsError error, Func<Task> retry)
     {
         if (Current != screen) return;
+        _stickyNotice = false;
         var history = _root == ProjectsRoot.History;
         var (severity, titleKey, messageKey) = error switch
         {
@@ -270,7 +287,7 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         {
             foreach (var project in added) AddProjectRow(_projectRows, project);
             UpdateLoadMore();
-            if (Current == screen) _statusBar.IsOpen = false;
+            if (Current == screen) CloseStatusBar();
             return;
         }
         var (content, layout) = BuildListContent();

@@ -89,6 +89,9 @@ internal sealed class ManagementView : UserControl
 
     private string L(string key) => _p.L(key);
 
+    /// <summary>Reloads the next time the page is shown (a write changed a reservation).</summary>
+    public void MarkStale() => _loadedAt = default;
+
     /// <summary>Loads on first display and again when the data is older than a minute (the chosen project is kept).</summary>
     public Task EnsureLoadedAsync() =>
         !_loaded || DateTimeOffset.Now - _loadedAt > StaleAfter ? LoadAsync() : Task.CompletedTask;

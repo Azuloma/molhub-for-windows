@@ -126,7 +126,7 @@ Assert(versionCode.Contains("RuntimeInformation.ProcessArchitecture", StringComp
     && versionCode.Contains("GetAvailableBrowserVersionString", StringComparison.Ordinal)
     && versionCode.Contains("WindowsAppSdkVersion", StringComparison.Ordinal)
     && !versionCode.Contains("typeof(Microsoft.UI.Xaml.Application).Assembly.GetName().Version", StringComparison.Ordinal)
-    && !versionCode.Contains("0.12.0", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
+    && !versionCode.Contains("0.13.0", StringComparison.Ordinal), "Version info must report observed Windows App SDK/WebView2 runtime details without a hardcoded display fallback.");
 Assert(loginXaml.Contains("WebView2", StringComparison.Ordinal) && loginCode.Contains("CoreWebView2", StringComparison.Ordinal), "Only LoginWindow may host WebView2.");
 Assert(loginXaml.Contains("x:Name=\"RootGrid\"", StringComparison.Ordinal)
     && loginCode.Contains("ThemeService.ReadSavedPreference", StringComparison.Ordinal)
@@ -163,10 +163,10 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.12.0</Version>", StringComparison.Ordinal), "Version source of truth must be v0.12.0.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.12.0.0\"", StringComparison.Ordinal), "Manifest version must be v0.12.0.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.12.0", StringComparison.Ordinal)
-    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.12.0", StringComparison.Ordinal), "Version documentation must be updated.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.13.0</Version>", StringComparison.Ordinal), "Version source of truth must be v0.13.0.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.13.0.0\"", StringComparison.Ordinal), "Manifest version must be v0.13.0.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.13.0", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md")).Contains("## v0.13.0", StringComparison.Ordinal), "Version documentation must be updated.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -424,11 +424,12 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
     foreach (var key in projectKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing projects string {key} in {locale}");
 }
 Assert(!projectsCode.Contains("startReservation", StringComparison.Ordinal) && !projectsCode.Contains("publishCommit", StringComparison.Ordinal)
+    && !projectsCode.Contains("cancelReservation", StringComparison.Ordinal)
     && !projectsCode.Contains("manageProject", StringComparison.Ordinal) && !projectsCode.Contains("createProject", StringComparison.Ordinal)
     && projectsCode.Contains("_p.StorageNote()", StringComparison.Ordinal)
     && projectsCode.Contains("ProjectsModel.SafeShareUri(uri.AbsoluteUri) is not { } safe", StringComparison.Ordinal)
     && projectsCode.Contains("Launcher.LaunchUriAsync(safe)", StringComparison.Ordinal),
-    "Projects must stay read-only, show the storage note with share links and open only validated links in the browser.");
+    "The project list/overview code stays read-only (writes live only in ProjectsView.Work.cs), shows the storage note with share links and opens only validated links in the browser.");
 Assert(mainCode.Contains("if (page == NativePage.Projects) return CreateProjectsPage();", StringComparison.Ordinal)
     && mainCode.Contains("if (CurrentStackPage?.TryGoBack() == true) return;", StringComparison.Ordinal)
     && dashboardCode.Contains("_openProject(project.Id, project.Name)", StringComparison.Ordinal),
@@ -650,4 +651,87 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
     foreach (var key in manageKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing project management string {key} in {locale}");
 }
 
-Console.WriteLine("v0.12.0 native shell, dashboard, commit history, project management, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+// ----- Writes: start work, cancel work, publish version -----
+var reservedProject = ProjectsModel.ParseProjectList(Json("""
+[{"id":"p1","name":"P","head":"c9","latest":{"id":"c9","title":"t","version":"v1"},"reservation":{"userId":"u1","username":"Azunel","base":"c9","startedAt":"2026-09-27T01:00:00.000Z"}},
+ {"id":"p2","name":"Q","head":null,"latest":null,"reservation":{"userId":"u2","username":"kalvin","base":"bad id"}}]
+"""), null)!.Projects;
+Assert(reservedProject[0] is { HeadId: "c9", Reservation.Base: "c9" } && reservedProject[1] is { HeadId: null, Reservation.Base: null },
+    "The project head and the reservation base must be parsed (invalid ids dropped) for the writes.");
+var startPayload = WorkModel.StartPayload("p1", "c9")!;
+Assert(startPayload["projectId"]!.GetValue<string>() == "p1" && startPayload["base"]!.GetValue<string>() == "c9"
+    && WorkModel.StartPayload("p2", null)!.ContainsKey("base") && WorkModel.StartPayload("p2", null)!["base"] is null
+    && WorkModel.StartPayload("../x", "c9") is null && WorkModel.CancelPayload("p1")!.Count == 1 && WorkModel.CancelPayload("bad id") is null,
+    "Start work sends the current head (null for a project without versions); payloads carry only valid ids.");
+var goodDraft = new PublishDraft(" Fix jumps ", " v1.2 ", " - fixed\n", " https://drive.example.com/f ");
+var publishPayload = WorkModel.PublishPayload("p1", "c9", goodDraft)!;
+Assert(WorkModel.Validate(goodDraft) == PublishFieldError.None && publishPayload["title"]!.GetValue<string>() == "Fix jumps"
+    && publishPayload["version"]!.GetValue<string>() == "v1.2" && publishPayload["changes"]!.GetValue<string>() == "- fixed"
+    && publishPayload["url"]!.GetValue<string>() == "https://drive.example.com/f" && publishPayload["base"]!.GetValue<string>() == "c9"
+    && WorkModel.PublishPayload("p1", "c9", goodDraft with { Title = " " }) is null,
+    "Publish sends the trimmed form with the reservation base, and nothing when the form is invalid.");
+Assert(WorkModel.Validate(new PublishDraft("", "a<b", "", "")) == (PublishFieldError.TitleMissing | PublishFieldError.VersionInvalid | PublishFieldError.ChangesMissing | PublishFieldError.UrlMissing)
+    && WorkModel.Validate(goodDraft with { Url = "ftp://x.example/f" }) == PublishFieldError.UrlInvalid
+    && WorkModel.Validate(goodDraft with { Url = "https://user:pw@x.example/f" }) == PublishFieldError.UrlInvalid
+    && WorkModel.Validate(goodDraft with { Title = new string('t', 151) }) == PublishFieldError.TitleTooLong
+    && WorkModel.Validate(goodDraft with { Version = new string('v', 41) }) == PublishFieldError.VersionInvalid
+    && WorkModel.Validate(goodDraft with { Version = "" }) == PublishFieldError.None,
+    "The publish form uses the server limits: required title/changes/URL, http(s) without credentials, version ≤ 40 without < >.");
+BridgeResult Write(int status, bool ok, string? code, BridgeOutcome outcome, string? details = null) =>
+    new("r", status, ok, null, null, code, details is null ? null : Json(details), false, outcome);
+Assert(WorkModel.Explain(Write(200, true, null, BridgeOutcome.Applied)).Kind == WriteOutcomeKind.Applied
+    && WorkModel.Explain(BridgeResult.HostFailure("r", "TIMEOUT", false, BridgeOutcome.Unknown)).Kind == WriteOutcomeKind.Unknown
+    && WorkModel.Explain(Write(500, false, "SERVER_ERROR", BridgeOutcome.Unknown)).Kind == WriteOutcomeKind.Unknown
+    && WorkModel.Explain(BridgeResult.HostFailure("r", "BRIDGE_UNAVAILABLE", false, BridgeOutcome.Rejected)).Kind == WriteOutcomeKind.NotSent
+    && WorkModel.Explain(Write(409, false, "RESERVATION_EXISTS", BridgeOutcome.Rejected, """{"reservedByYou":true}""")).MessageKey == "Work_ErrorReservedByYou"
+    && WorkModel.Explain(Write(409, false, "RESERVATION_EXISTS", BridgeOutcome.Rejected, """{"reservedByYou":false}""")).MessageKey == "Work_ErrorReservedByOther"
+    && WorkModel.Explain(Write(409, false, "STALE_VERSION", BridgeOutcome.Rejected, """{"head":"c10"}""")).MessageKey == "Work_ErrorStale"
+    && WorkModel.Explain(Write(409, false, "VERSION_CONFLICT", BridgeOutcome.Rejected)).MessageKey == "Work_ErrorVersionConflict"
+    && WorkModel.Explain(Write(409, false, "RESERVATION_MISSING", BridgeOutcome.Rejected)).MessageKey == "Work_ErrorReservationMissing"
+    && WorkModel.Explain(Write(409, false, "NOT_RESERVATION_OWNER", BridgeOutcome.Rejected)).MessageKey == "Work_ErrorNotReservationOwner"
+    && WorkModel.Explain(Write(403, false, "NOT_OWNER", BridgeOutcome.Rejected)).MessageKey == "Work_ErrorNotOwner"
+    && WorkModel.Explain(Write(401, false, "UNAUTHORIZED", BridgeOutcome.Rejected)).SessionEnded
+    && WorkModel.Explain(Write(409, false, "SOMETHING_NEW", BridgeOutcome.Rejected)).MessageKey == "Work_ErrorRejected",
+    "Write results: applied, unknown (timeout/5xx), not sent, and each rejection explained by its code.");
+var gate = new WriteGate();
+var gateFirst = gate.TryEnter() && gate.InFlight && !gate.TryEnter();
+gate.Exit();
+Assert(gateFirst && !gate.InFlight && gate.TryEnter(), "The write gate admits one write at a time and opens again when it is released.");
+var longJapanese = goodDraft with { Changes = new string('あ', 10_000) };
+Assert(WorkModel.Validate(longJapanese) == PublishFieldError.None
+    && BridgePolicy.BuildRequest("publishCommit", "r1", WorkModel.PublishPayload("p1", "c9", longJapanese)) is not null
+    && WorkModel.Validate(longJapanese with { Title = new string('あ', 150), Url = "https://drive.example.com/" + new string('a', 2000) }) == PublishFieldError.None,
+    "Japanese text up to the server's character limits must fit the body limit (measured as the page sends it, not \\u-escaped).");
+Assert(WorkModel.Explain(BridgeResult.HostFailure("r", "TOO_LARGE", false, BridgeOutcome.Rejected)) is { Kind: WriteOutcomeKind.NotSent, MessageKey: "Work_ErrorTooLarge" }
+    && WorkModel.Explain(Write(400, false, "INVALID_REQUEST", BridgeOutcome.None)).Kind == WriteOutcomeKind.Unknown,
+    "An oversized request is 'not sent, too long' (not a connection problem); a result without a write outcome is unknown.");
+Assert(WorkModel.StillReservedBy(reservedProject[0], "azunel") && !WorkModel.StillReservedBy(reservedProject[1], "azunel") && !WorkModel.StillReservedBy(null, "azunel"),
+    "After an unknown publish, the refreshed reservation tells whether the version was likely published.");
+var workCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Work.cs"));
+Assert(new[] { "startReservation", "cancelReservation", "publishCommit" }.All(c => BridgePolicy.IsWrite(c) && workCode.Contains($"\"{c}\"", StringComparison.Ordinal))
+    && workCode.Contains("WorkModel.Explain(await _request(", StringComparison.Ordinal)
+    && System.Text.RegularExpressions.Regex.Matches(workCode, "_request\\(\"publishCommit\"").Count == 1
+    && workCode.Contains("ConfirmPublishAsync", StringComparison.Ordinal) && workCode.Contains("DefaultButton = ContentDialogButton.Close", StringComparison.Ordinal)
+    && workCode.Contains("PublishStorageNote()", StringComparison.Ordinal)
+    && System.Text.RegularExpressions.Regex.Matches(workCode, "_gate\\.TryEnter\\(\\)").Count == 2 && System.Text.RegularExpressions.Regex.Matches(workCode, "_gate\\.Exit\\(\\);").Count == 2
+    && !workCode.Contains("IsEnabled = !_gate", StringComparison.Ordinal)
+    && workCode.Contains("_pendingWriteNotice = (severity, title, message, sessionEnded);", StringComparison.Ordinal)
+    && workCode.Contains("_stickyNotice = notice.Severity is InfoBarSeverity.Warning or InfoBarSeverity.Error;", StringComparison.Ordinal)
+    && projectsCode.Contains("ShowPendingWriteNotice();", StringComparison.Ordinal) && projectsCode.Contains("if (!_stickyNotice) _statusBar.IsOpen = false;", StringComparison.Ordinal)
+    && projectsCode.Contains("if (generation != screen.LoadGeneration) return true;", StringComparison.Ordinal)
+    && System.Text.RegularExpressions.Regex.Matches(mainCode, "_writeGate\\);").Count == 2
+    && workCode.Contains("Style = PageParts.Res(\"DefaultContentDialogStyle\")", StringComparison.Ordinal)
+    && !System.Text.RegularExpressions.Regex.IsMatch(workCode, "[\uE000-\uF8FF]") && !workCode.Contains("GLYPH_", StringComparison.Ordinal)
+    && dashboardCode.Contains("_openPublish(project.Id, project.Name)", StringComparison.Ordinal)
+    && mainCode.Contains("OnWorkChanged", StringComparison.Ordinal),
+    "Writes send each command once (no automatic resend), confirm before publishing (Cancel is the default), show the storage note, and the Dashboard opens the publish form.");
+var workKeys = System.Text.RegularExpressions.Regex.Matches(workCode + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "WorkModel.cs")) + dashboardCode, "\"(Work_[A-Za-z0-9]+)\"").Select(m => m.Groups[1].Value).Distinct().ToList();
+Assert(workKeys.Count >= 40, "Write strings must be found in the source.");
+foreach (var locale in new[] { "en-US", "ja-JP" })
+{
+    var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
+    foreach (var key in workKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing write string {key} in {locale}");
+    Assert(!resource.Contains("publish from MolHub on the web", StringComparison.Ordinal), $"The owner hint must no longer say publishing is web-only: {locale}");
+}
+
+Console.WriteLine("v0.13.0 native shell, dashboard, work writes, commit history, project management, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

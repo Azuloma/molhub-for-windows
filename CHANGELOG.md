@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.13.0
+
+- First native writes, on the project page's Work reservation card: **Start work** when the project is free (`startReservation`, from the current head), and **Publish version** and **Cancel work** when the reservation is yours (`cancelReservation`). The card also shows the web note that reservations do not lock local files.
+- **Publish version** opens a form on the project's own screen stack (also from the Dashboard's "Your work" rows): based-on version, title (150), version label (optional, 40, unique in the project), changes (10,000) and the MFA share URL (http/https without credentials, 2,048), with the web storage note. The form is checked with the server limits before sending, and publishing asks for confirmation first ("Cancel" is the default). A published version ends the reservation, as on the web.
+- Every write is sent once. The project is refreshed afterwards and the result is explained: success (the web wording), a specific reason for each server rejection (already reserved by you or another member, outdated base version, reservation no longer active or held by someone else, version label in use, invalid URL, project deleted, no access, session ended), or "the result couldn't be confirmed" when the connection was lost. An unconfirmed write is never resent automatically; after an unconfirmed publish the refreshed reservation tells whether the version was most likely published.
+- The reservation hint no longer says publishing is web-only.
+
 ## v0.12.0
 
 - Added the native, read-only **Project management** page (`manageProjects`, `manageProject`), following the web "Manage" panel. It appears in the navigation pane for approved project owners and for site administrators (who manage every project). Pick a project (deleted projects are listed last and marked "Deleted") to see its state and project administrator, members (with the administrator marked and each account's status), the current work reservation, approval requests (kind, reason, requester, date, status), Discord destinations and project activity. Member events name the affected account; other internal ids are not shown. "You do not manage any projects." is shown when the list is empty.

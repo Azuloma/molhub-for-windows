@@ -30,19 +30,26 @@ internal sealed partial class ProjectsView
         Push(screen);
     }
 
-    private async Task LoadProjectAsync(Screen screen)
+    private Task LoadProjectAsync(Screen screen) => ReloadProjectAsync(screen);
+
+    /// <summary>Loads the project; returns false only when this load failed (a newer load of the same screen counts as refreshed).</summary>
+    private async Task<bool> ReloadProjectAsync(Screen screen)
     {
+        var generation = ++screen.LoadGeneration;
         var result = await _request("project", ProjectsModel.ProjectPayload(screen.Id));
+        // A newer load of the same screen is responsible for what is shown (and for its own error).
+        if (generation != screen.LoadGeneration) return true;
         var detail = result.Ok && result.Data is { } data ? ProjectsModel.ParseProjectDetail(data) : null;
         if (detail is null)
         {
             ShowError(screen, result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result), () => LoadProjectAsync(screen));
-            return;
+            return false;
         }
         screen.Title = detail.Project.Name;
         if (Current == screen) UpdateBreadcrumb();
         var (content, layout) = BuildProjectContent(screen, detail);
         SetContent(screen, content, layout);
+        return true;
     }
 
     private (FrameworkElement, TwoColumnLayout?) BuildProjectContent(Screen screen, ProjectDetail detail)
@@ -106,6 +113,8 @@ internal sealed partial class ProjectsView
 
         var side = new StackPanel { Spacing = 16 };
         var work = WorkStatus(project.Reservation, compact: false);
+        work.Children.Add(WorkActions(screen, project));
+        work.Spacing = 10;
         work.Padding = new Thickness(16, 12, 16, 14);
         side.Children.Add(_p.Card("Projects_WorkReservation", "", work));
         side.Children.Add(AboutCard(project, head));
@@ -381,7 +390,7 @@ internal sealed partial class ProjectsView
             next = page.NextOffset;
             total = page.Total;
             screen.LoadedAt = DateTimeOffset.Now;
-            if (Current == screen) _statusBar.IsOpen = false;
+            if (Current == screen) CloseStatusBar();
             onPage?.Invoke(page);
             Render();
         }

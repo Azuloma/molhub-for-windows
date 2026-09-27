@@ -101,13 +101,25 @@ public static partial class BridgePolicy
     public static bool IsTrustedSource(string? source) =>
         Uri.TryCreate(source, UriKind.Absolute, out var uri) && IsBridgeDocument(uri);
 
+    // The page re-serializes the payload with JSON.stringify, which keeps non-ASCII text as UTF-8; measuring the default
+    // escaped form (6 bytes per Japanese character) would refuse bodies the page and server accept.
+    private static readonly JsonSerializerOptions WireSizeOptions = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    /// <summary>UTF-8 size of a payload as the page sends it (for the 50,000-byte body limit).</summary>
+    public static int PayloadBytes(JsonObject? payload)
+    {
+        var body = payload?.DeepClone() as JsonObject ?? new JsonObject();
+        body.Remove("requestId");
+        return Encoding.UTF8.GetByteCount(body.ToJsonString(WireSizeOptions));
+    }
+
     /// <summary>Builds the JSON posted to the page, or null when the command, id or payload size is not allowed.</summary>
     public static string? BuildRequest(string command, string requestId, JsonObject? payload)
     {
         if (!IsKnownCommand(command) || !IsValidRequestId(requestId)) return null;
         var body = payload?.DeepClone() as JsonObject ?? new JsonObject();
         body.Remove("requestId");
-        if (Encoding.UTF8.GetByteCount(body.ToJsonString()) > MaxPayloadBytes) return null;
+        if (PayloadBytes(body) > MaxPayloadBytes) return null;
         return new JsonObject
         {
             ["command"] = command,

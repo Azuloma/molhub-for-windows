@@ -26,6 +26,7 @@ internal sealed class DashboardView : UserControl
     private readonly Func<Task<BridgeResult>> _load;
     private readonly Action<NativePage> _navigate;
     private readonly Action<string, string> _openProject;
+    private readonly Action<string, string> _openPublish;
     private readonly Action _signInAgain;
     private readonly InfoBar _statusBar = new() { IsClosable = false, IsOpen = false };
     private readonly ContentControl _body = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
@@ -38,7 +39,8 @@ internal sealed class DashboardView : UserControl
     private int _generation;
 
     public DashboardView(Func<string, string> localize, AuthenticatedUser user, string language,
-        Func<Task<BridgeResult>> load, Action<NativePage> navigate, Action<string, string> openProject, Action signInAgain)
+        Func<Task<BridgeResult>> load, Action<NativePage> navigate, Action<string, string> openProject, Action<string, string> openPublish,
+        Action signInAgain)
     {
         _l = localize;
         _user = user;
@@ -46,6 +48,7 @@ internal sealed class DashboardView : UserControl
         _load = load;
         _navigate = navigate;
         _openProject = openProject;
+        _openPublish = openPublish;
         _signInAgain = signInAgain;
 
         var title = new TextBlock { Text = _l("Page_Dashboard"), Style = Res("TitleTextBlockStyle") };
@@ -62,6 +65,9 @@ internal sealed class DashboardView : UserControl
         };
         SizeChanged += (_, e) => ApplyLayout(e.NewSize.Width);
     }
+
+    /// <summary>Reloads the next time the page is shown (a write changed reservations or commits).</summary>
+    public void MarkStale() => _loadedAt = default;
 
     /// <summary>Loads on first display and again when the data is older than a minute.</summary>
     public Task EnsureLoadedAsync() =>
@@ -297,7 +303,17 @@ internal sealed class DashboardView : UserControl
                 Text = since.Length > 0 ? $"{_l("Dashboard_ReservedSince")} {since}" : _l("Dashboard_ReservedSince"),
                 Style = Res("DashboardCaptionTextStyle")
             });
-            list.Children.Add(ProjectButton(item, project));
+            // The project row opens the project; "Publish version" opens its publish form directly, as on the web.
+            var row = new Grid { ColumnSpacing = 8 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(ProjectButton(item, project));
+            var publish = new Button { Content = _l("Work_PublishShort"), VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetName(publish, $"{_l("Work_PublishShort")}: {project.Name}");
+            publish.Click += (_, _) => _openPublish(project.Id, project.Name);
+            Grid.SetColumn(publish, 1);
+            row.Children.Add(publish);
+            list.Children.Add(row);
         }
         return Card("Dashboard_YourWork", "", list);
     }

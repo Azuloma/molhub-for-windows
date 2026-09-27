@@ -29,6 +29,8 @@ public sealed partial class MainWindow : Window
     private ApprovalView? _approval;
     private MaintenanceView? _maintenance;
     private ManagementView? _management;
+    // One write at a time across the Projects and Commit history pages.
+    private readonly WriteGate _writeGate = new();
     private string _bridgeStatusKey = "BridgeConnecting";
     private TextBlock? _bridgeStatusText;
     private bool _signingOut;
@@ -354,6 +356,7 @@ public sealed partial class MainWindow : Window
             () => _bridge.RequestAsync("dashboard"),
             page => NavigateTo(page),
             OpenProject,
+            OpenPublish,
             () => _ = SignOutAsync());
         _ = _dashboard.EnsureLoadedAsync();
         return _dashboard;
@@ -364,7 +367,10 @@ public sealed partial class MainWindow : Window
         _projects ??= new ProjectsView(L, _user, ReadLanguage(),
             (command, payload) => _bridge.RequestAsync(command, payload),
             () => _ = SignOutAsync(),
-            UpdateBackButton);
+            UpdateBackButton,
+            ProjectsRoot.List,
+            OnWorkChanged,
+            _writeGate);
         _ = _projects.EnsureLoadedAsync();
         return _projects;
     }
@@ -375,7 +381,9 @@ public sealed partial class MainWindow : Window
             (command, payload) => _bridge.RequestAsync(command, payload),
             () => _ = SignOutAsync(),
             UpdateBackButton,
-            ProjectsRoot.History);
+            ProjectsRoot.History,
+            OnWorkChanged,
+            _writeGate);
         _ = _commitHistory.EnsureLoadedAsync();
         return _commitHistory;
     }
@@ -410,6 +418,22 @@ public sealed partial class MainWindow : Window
             UpdateBackButton);
         _ = _maintenance.EnsureLoadedAsync();
         return _maintenance;
+    }
+
+    /// <summary>Opens a project's publish form from the Dashboard (list and project underneath for Back).</summary>
+    private void OpenPublish(string projectId, string name)
+    {
+        NavigateTo(NativePage.Projects);
+        _projects?.OpenPublish(projectId, name);
+    }
+
+    /// <summary>A write changed reservations or commits: other pages reload when shown again.</summary>
+    private void OnWorkChanged()
+    {
+        _dashboard?.MarkStale();
+        _projects?.MarkStale();
+        _commitHistory?.MarkStale();
+        _management?.MarkStale();
     }
 
     /// <summary>Opens a project overview from another page (the list stays underneath for Back).</summary>

@@ -5,7 +5,8 @@ using System.Text.RegularExpressions;
 
 namespace FusionLedger.Windows;
 
-public sealed record ProjectReservation(string? Username, DateTimeOffset? StartedAt);
+/// <summary>An active reservation; `Base` is the head it was started from, which a publish must name again.</summary>
+public sealed record ProjectReservation(string? Username, DateTimeOffset? StartedAt, string? Base = null);
 
 public sealed record ProjectLatest(string Id, string Title, string Version, DateTimeOffset? CreatedAt);
 
@@ -16,7 +17,8 @@ public sealed record ProjectSummary(
     ProjectLatest? Latest,
     ProjectReservation? Reservation,
     DateTimeOffset? CreatedAt,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    string? HeadId = null);
 
 public sealed record ProjectListPage(IReadOnlyList<ProjectSummary> Projects, int Total, int? NextOffset);
 
@@ -295,9 +297,12 @@ public static partial class ProjectsModel
         ProjectReservation? reservation = null;
         if (item.TryGetProperty("reservation", out var r) && r.ValueKind == JsonValueKind.Object)
         {
-            reservation = new ProjectReservation(DashboardModel.Text(r, "username", MaxNameLength), DashboardModel.Date(r, "startedAt"));
+            var reservationBase = DashboardModel.Text(r, "base", 100);
+            reservation = new ProjectReservation(DashboardModel.Text(r, "username", MaxNameLength), DashboardModel.Date(r, "startedAt"),
+                IsValidId(reservationBase) ? reservationBase : null);
         }
 
+        var head = DashboardModel.Text(item, "head", 100);
         return new ProjectSummary(
             id!,
             name,
@@ -305,7 +310,8 @@ public static partial class ProjectsModel
             latest,
             reservation,
             DashboardModel.Date(item, "createdAt"),
-            DashboardModel.Date(item, "updatedAt"));
+            DashboardModel.Date(item, "updatedAt"),
+            IsValidId(head) ? head : null);
     }
 
     internal static List<ProjectCommit> ParseCommits(JsonElement array) =>
