@@ -178,7 +178,7 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
     {
         _rows.Children.Clear();
         if (_items.Count == 0) _rows.Children.Add(_p.Secondary(L("Announcements_None")));
-        foreach (var item in _items) _rows.Children.Add(Row(item));
+        foreach (var item in _items) _rows.Children.Add(AnnouncementCard.Row(item, L, _language, () => OpenDetail(item)));
         _loadMore.Visibility = _next is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -256,44 +256,13 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
         return row;
     }
 
-    private FrameworkElement Meta(Announcement item)
-    {
-        var meta = new InlineWrapPanel { HorizontalSpacing = 8 };
-        if (item.Version.Length > 0) meta.Children.Add(PageParts.VersionBadge(item.Version));
-        var date = DashboardModel.FormatDate(item.DisplayDate, _language);
-        if (date.Length > 0) meta.Children.Add(_p.Secondary(date, wrap: false));
-        return meta;
-    }
-
-    private Border Row(Announcement item)
-    {
-        var panel = new StackPanel { Spacing = 8, Padding = new Thickness(20, 16, 20, 12) };
-        panel.Children.Add(PageParts.Heading(item.Title, AutomationHeadingLevel.Level3));
-        panel.Children.Add(Meta(item));
-        if (item.Details.Length > 0)
-        {
-            panel.Children.Add(new TextBlock { Text = MaintenanceModel.Preview(item.Details, MaintenanceModel.ListPreviewLength), TextWrapping = TextWrapping.Wrap });
-        }
-        var details = _p.LinkButton(L("Announcements_Details"), () => OpenDetail(item), new Thickness(-12, 0, 0, 0));
-        AutomationProperties.SetName(details, string.Format(L("Announcements_DetailsForFormat"), item.Title));
-        panel.Children.Add(details);
-        return new Border { Style = PageParts.Res("DashboardCardStyle"), Child = panel };
-    }
-
     private FrameworkElement BuildDetail(Announcement item)
     {
         var back = _p.SubtleButton(L("Announcements_Back"), BackGlyph, () => TryGoBack());
         var panel = new StackPanel { Spacing = 16 };
         panel.Children.Add(TitleRow(L("Announcements_DetailTitle"), back));
 
-        var card = new StackPanel { Spacing = 10, Padding = new Thickness(20, 16, 20, 20) };
-        card.Children.Add(PageParts.Heading(item.Title, AutomationHeadingLevel.Level2, "SubtitleTextBlockStyle"));
-        card.Children.Add(Meta(item));
-        if (item.Details.Length > 0)
-        {
-            card.Children.Add(new TextBlock { Text = item.Details, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true });
-        }
-        panel.Children.Add(new Border { Style = PageParts.Res("DashboardCardStyle"), Child = card });
+        panel.Children.Add(AnnouncementCard.Detail(item, L, _language));
         return panel;
     }
 }

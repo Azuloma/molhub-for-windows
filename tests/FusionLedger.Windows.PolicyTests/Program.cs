@@ -47,6 +47,8 @@ var root = new DirectoryInfo(AppContext.BaseDirectory);
 while (root is not null && !File.Exists(Path.Combine(root.FullName, "FusionLedger.Windows.csproj"))) root = root.Parent;
 Assert(root is not null, "Source root must be discoverable.");
 var sourceRoot = root!.FullName;
+// ----- Administration (v0.14.5, display only) -----
+AdministrationPolicyTests.Run(sourceRoot);
 var mainXaml = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml"));
 var mainCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml.cs"));
 var loginXaml = File.ReadAllText(Path.Combine(sourceRoot, "Auth", "LoginWindow.xaml"));
@@ -164,12 +166,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.4</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.4.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.4.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.4.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.5</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.5.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.5.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.5.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.4", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.4", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.4", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.3", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.4 above v0.14.3 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.5", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.5", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.5", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.4", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.5 above v0.14.4 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -530,16 +532,16 @@ Assert(MaintenanceModel.ShowsLockNote(approvedMember) && MaintenanceModel.ShowsL
     && !MaintenanceModel.ShowsLockNote(pendingUser with { Status = "rejected" }) && !MaintenanceModel.ShowsLockNote(pendingUser with { Status = "suspended" }),
     "The member lock note (announcements stay readable) is only for accounts that can read announcements, never for admins.");
 var announcementPage = MaintenanceModel.ParseList(Json("""
-[{"id":"a1","title":"Maintenance finished","version":"v0.19.0","details":"Line one\n\n  Line two","startedAt":"2026-09-20T10:00:00.000Z","endedAt":"2026-09-20T11:00:00.000Z","createdAt":"2026-09-20T11:00:01.000Z"},
+[{"id":"a1","title":"Maintenance finished","version":"v0.19.0","details":"Line one\r\n\r\n  Line two","startedAt":"2026-09-20T10:00:00.000Z","endedAt":"2026-09-20T11:00:00.000Z","createdAt":"2026-09-20T11:00:01.000Z"},
  {"id":"a2","title":"No end","version":"","details":"","startedAt":null,"endedAt":null,"createdAt":"2026-09-18T09:00:00.000Z"},
  {"id":"bad id","title":"dropped"},{"id":"a4","title":""}]
 """), Json("""{"limit":30,"offset":0,"nextOffset":null,"total":2}"""));
-Assert(announcementPage is { Items.Count: 2, Total: 2, NextOffset: null } && announcementPage.Items[0].Details == "Line one\n\n  Line two"
+Assert(announcementPage is { Items.Count: 2, Total: 2, NextOffset: null } && announcementPage.Items[0].Details == "Line one\r\n\r\n  Line two"
     && announcementPage.Items[0].DisplayDate == DateTimeOffset.Parse("2026-09-20T11:00:00Z") && announcementPage.Items[1].DisplayDate == DateTimeOffset.Parse("2026-09-18T09:00:00Z"),
     "Announcements must parse the server list, drop invalid rows and date by the maintenance end (creation as fallback).");
 Assert(MaintenanceModel.ParseList(Json("{}"), null) is null && MaintenanceModel.ParseList(Json("[]"), null) is { Items.Count: 0, NextOffset: null },
     "Unexpected announcement shapes must not render; an empty list is valid.");
-Assert(MaintenanceModel.Preview("- One\r\n- Two  \n\n\n\nEnd", 120) == "- One\n- Two\n\nEnd" && MaintenanceModel.Preview(new string('x', 130), 120) == new string('x', 120) + "…",
+Assert(MaintenanceModel.Preview("- One\r\n- Two  \r\n\r\n\r\n\r\nEnd", 120) == "- One\n- Two\n\nEnd" && MaintenanceModel.Preview(new string('x', 130), 120) == new string('x', 120) + "…",
     "List previews keep the details' line breaks like the web (blank-line runs reduced) and cut with an ellipsis.");
 var announcementPayload = MaintenanceModel.ListPayload(30);
 Assert(announcementPayload.Count == 2 && announcementPayload["limit"]!.GetValue<int>() == MaintenanceModel.PageSize && announcementPayload["offset"]!.GetValue<int>() == 30
@@ -552,6 +554,7 @@ Assert(MaintenanceModel.ErrorFor(new BridgeResult("r", 403, false, null, null, "
 Assert(new[] { "announcements", "maintenance", "session" }.All(c => BridgePolicy.IsKnownCommand(c) && !BridgePolicy.IsWrite(c)),
     "The approval screen and Server maintenance must use only read commands.");
 var announcementsCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Maintenance", "MaintenanceView.cs"));
+var announcementCardCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Common", "AnnouncementCard.cs"));
 var approvalCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Approval", "ApprovalView.cs"));
 Assert(mainCode.Contains("NavigateTo(NativePageCatalog.StartPage(_user), false);", StringComparison.Ordinal)
     && mainCode.Contains("if (!NativePageCatalog.IsAvailable(page, _user)) return;", StringComparison.Ordinal)
@@ -570,12 +573,16 @@ Assert(approvalCode.Contains("ApprovalModel.Check(", StringComparison.Ordinal) &
     && !announcementsCode.Contains("startMaintenance", StringComparison.Ordinal) && !announcementsCode.Contains("endMaintenance", StringComparison.Ordinal)
     && !announcementsCode.Contains("Write", StringComparison.Ordinal) && !approvalCode.Contains("Write", StringComparison.Ordinal),
     "The approval screen and Server maintenance must stay read-only (no start/complete maintenance controls).");
-foreach (var source in new[] { announcementsCode, approvalCode })
+Assert(announcementsCode.Contains("AnnouncementCard.Row", StringComparison.Ordinal)
+    && announcementsCode.Contains("AnnouncementCard.Detail", StringComparison.Ordinal)
+    && announcementCardCode.Contains("MaintenanceModel.Preview", StringComparison.Ordinal),
+    "Server maintenance must use the shared announcement card renderer for list and detail views.");
+foreach (var source in new[] { announcementsCode, announcementCardCode, approvalCode })
 {
     Assert(!System.Text.RegularExpressions.Regex.IsMatch(source, "[\uE000-\uF8FF]") && !source.Contains("GLYPH_", StringComparison.Ordinal),
         "New glyphs must be written as \\u escapes.");
 }
-var accessKeys = System.Text.RegularExpressions.Regex.Matches(announcementsCode + approvalCode + mainCode, "\"((?:Pending|Announcements|Maintenance)_[A-Za-z0-9]+)\"").Select(m => m.Groups[1].Value)
+var accessKeys = System.Text.RegularExpressions.Regex.Matches(announcementsCode + announcementCardCode + approvalCode + mainCode, "\"((?:Pending|Announcements|Maintenance)_[A-Za-z0-9]+)\"").Select(m => m.Groups[1].Value)
     .Concat(new[] { "Page_Awaiting approval", "Page_Announcements" }).Distinct().ToList();
 Assert(accessKeys.Count >= 22, "Approval and maintenance strings must be found in the source.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
@@ -741,7 +748,7 @@ Assert(startPayload["projectId"]!.GetValue<string>() == "p1" && startPayload["ba
     && WorkModel.StartPayload("p2", null)!.ContainsKey("base") && WorkModel.StartPayload("p2", null)!["base"] is null
     && WorkModel.StartPayload("../x", "c9") is null && WorkModel.CancelPayload("p1")!.Count == 1 && WorkModel.CancelPayload("bad id") is null,
     "Start work sends the current head (null for a project without versions); payloads carry only valid ids.");
-var goodDraft = new PublishDraft(" Fix jumps ", " v1.2 ", " - fixed\n", " https://drive.example.com/f ");
+var goodDraft = new PublishDraft(" Fix jumps ", " v1.2 ", " - fixed\r\n", " https://drive.example.com/f ");
 var publishPayload = WorkModel.PublishPayload("p1", "c9", goodDraft)!;
 Assert(WorkModel.Validate(goodDraft) == PublishFieldError.None && publishPayload["title"]!.GetValue<string>() == "Fix jumps"
     && publishPayload["version"]!.GetValue<string>() == "v1.2" && publishPayload["changes"]!.GetValue<string>() == "- fixed"
@@ -1051,7 +1058,7 @@ static string SliceBetween(string text, string startMarker, string endMarker, st
     return text[sliceStart..sliceEnd];
 }
 var pagePartsCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Common", "PageParts.cs"));
-var centeredPageBody = SliceBetween(pagePartsCode, "public static ScrollViewer CenteredPage(FrameworkElement column, double maxWidth)", "\n    }", "PageParts.CenteredPage");
+var centeredPageBody = SliceBetween(pagePartsCode, "public static ScrollViewer CenteredPage(FrameworkElement column, double maxWidth)", "\r\n    }", "PageParts.CenteredPage");
 Assert(System.Text.RegularExpressions.Regex.IsMatch(centeredPageBody, @"new CenteredColumnPanel\s*\{\s*ColumnMaxWidth = maxWidth\s*\}")
     && centeredPageBody.Contains("Children.Add(column);", StringComparison.Ordinal)
     && centeredPageBody.Contains("new ScrollViewer", StringComparison.Ordinal)
@@ -1113,4 +1120,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.4 native shell, dashboard, work writes, commit history, project management, profile settings, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.5 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
