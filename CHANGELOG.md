@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.14.8
+
+- Changed the page transition in the main window: switching sections now slides the new page straight up from below instead of diagonally from the lower right.
+- No Web API or bridge contract changed.
+
 ## v0.14.7
 
 - Administration → Members can now change member accounts, as on the web admin panel: Approve, Reject and Suspend, and Issue reset code. The actions offered follow the account's status (awaiting approval: Approve, Reject, Suspend, Issue reset code; approved: Issue reset code, Suspend; rejected: Approve, Suspend; suspended: Approve). Administrator accounts, including your own, have no actions.

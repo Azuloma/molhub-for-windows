@@ -167,7 +167,7 @@
             <ContentControl x:Name="ContentFrame" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
                 <ContentControl.ContentTransitions>
                     <TransitionCollection>
-                        <EntranceThemeTransition FromHorizontalOffset="40" />
+                        <EntranceThemeTransition FromHorizontalOffset="0" FromVerticalOffset="40" />
                     </TransitionCollection>
                 </ContentControl.ContentTransitions>
             </ContentControl>

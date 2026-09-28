@@ -85,7 +85,7 @@ var titleBarMarkup = mainXaml[..mainXaml.IndexOf("</controls:TitleBar>", StringC
 Assert(!mainXaml.Contains("PaneToggleRequested", StringComparison.Ordinal)
     && !titleBarMarkup.Contains("IsPaneToggleButtonVisible", StringComparison.Ordinal), "TitleBar must not host a duplicate pane toggle.");
 Assert(mainXaml.Contains("<ContentControl x:Name=\"ContentFrame\" HorizontalContentAlignment=\"Stretch\" VerticalContentAlignment=\"Stretch\">", StringComparison.Ordinal)
-    && mainXaml.Contains("<EntranceThemeTransition FromHorizontalOffset=\"40\"", StringComparison.Ordinal)
+    && mainXaml.Contains("<EntranceThemeTransition FromHorizontalOffset=\"0\" FromVerticalOffset=\"40\"", StringComparison.Ordinal)
     && mainCode.Contains("ContentFrame.Content = CreatePlaceholder(page)", StringComparison.Ordinal)
     && !mainCode.Contains("ContentFrame.Navigate", StringComparison.Ordinal), "Section content must animate with the native theme transition without Frame navigation.");
 Assert(mainCode.Contains("private void RootGrid_Loaded", StringComparison.Ordinal)
@@ -185,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.7</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.7.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.7.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.7.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.8</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.8.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.8.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.8.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.7", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.7", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.7", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.6", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.7 above v0.14.6 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.8", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.8", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.8", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.7", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.8 above v0.14.7 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -1139,4 +1139,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.7 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.8 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
