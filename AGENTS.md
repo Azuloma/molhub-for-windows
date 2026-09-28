@@ -4,12 +4,28 @@ Native-first WinUI 3 client (packaged x64, .NET 10) for the MolHub web app. Inte
 
 ## Roles
 
-- Default: Claude Code implements, Codex reviews independently. The owner's request may swap or change roles; follow the role the request gives you.
-- The implementing session owns edits, verification and the work-plan entry. A reviewer is read-only unless the request says otherwise.
+Default split (owner decision 2026-09-28). The owner's request may change roles; follow the role the request or the Orca Task gives you.
+
+| Role | Agent | May edit | Never |
+| --- | --- | --- | --- |
+| Coordinator | Claude Code | `AGENTS.md`, `CLAUDE.md`, `.claude/rules/*.md`, `.claude_stuff/` (only writer of `WORK_PLAN.md`, `DESIGN.md`, specs), `CHANGELOG.md`, `README.md`, `VERSION.md` | app code, tests, csproj/manifest |
+| Implementer | Codex (GPT-6-Luna high) | app code, `Strings/*.resw`, `tests/`, csproj/manifest version | `.claude_stuff/`, instruction files, release docs |
+| Structure reviewer | Codex (GPT-6-Luna high) | nothing: reports folder/file-layout proposals; the coordinator decides, the implementer moves files | any edit |
+| Reviewer / tester | Codex (GPT-6-Sol medium) | nothing: reviews, runs restore/tests/build, does the read-only device check | any edit, install, password, sign-out, writes not on the "Authorized writes" list |
+
+- The coordinator writes specs and Task specs, orders the work and records results; it does not edit app code or tests.
+- The implementer writes the code and the policy tests and runs the full verification (see "Verify"); the reviewer/tester checks both independently.
+- One writer per checkout at a time: the coordinator edits only while no implementer Task is running. No Claude subagents; Orca workers are Codex only.
+
+## Orchestration (Orca)
+
+- The coordinator binds one Orca Run per piece of work (`orca orchestration run-create`) and starts each Task on the role's existing terminal (`orca orchestration worker-start --terminal <handle> --worktree current`).
+- Every Task spec names Target, Change, Constraints, Ownership (what the worker may edit) and Observable acceptance; review Tasks carry the handoff below.
+- A worker does only its Task, asks blocking questions with the preamble's `ask` command, and ends with exactly one `worker_done` (`--outcome succeeded|failed`, `--files-modified` when it edited files).
 
 ## Hard rules (every agent, every role)
 
-- **Git:** never run `git commit`, `git push` or any other history-changing command (amend, merge, rebase, reset, tag, stash, checkout of other branches). The owner commits and pushes. Only the implementing session may commit/push, and only when the owner explicitly asks in chat; never a reviewer or subagent. Never revert or overwrite changes you did not make.
+- **Git:** never run `git commit`, `git push` or any other history-changing command (amend, merge, rebase, reset, tag, stash, checkout of other branches). The owner commits and pushes. Only the coordinator may commit/push, and only when the owner explicitly asks in chat; never a Codex worker or subagent. Never revert or overwrite changes you did not make.
 - **No signing or distribution work.** No certificates, signing or release distribution; the unsigned Debug MSIX is for local development only.
 - **The owner installs packages.** Never run `Install-Prototype.ps1` without `-WhatIf`, `Add-AppxPackage` or `Remove-AppxPackage`. Build, run `-WhatIf`, hand over the install command and wait. After "installed", confirm `Get-AppxPackage` shows the new version and the DLL hash matches the build.
 - **Never type the owner's password.** Sign-in, sign-out and password changes need the owner.
@@ -40,10 +56,10 @@ The Web repository (MolHub) owns `/api/v1`, `docs/WINDOWS_API.md`, `docs/openapi
   | `tests/` | `tests.md` |
   | `*.csproj`, `Package.appxmanifest`, `VERSION.md`, `CHANGELOG.md`, `README.md` | `release.md` |
 
-- **Shared work plan:** in Orca worktrees `.claude_stuff/` is one live copy shared by all checkouts. Only the implementing session named in the request updates `WORK_PLAN.md`, one writer at a time; reviewers never edit it and put results in their report. It never replaces a checkout's own Git state: always read your own `git status --short --untracked-files=all`, branch and HEAD; the plan's Git line describes only the main checkout's `main`.
+- **Shared work plan:** in Orca worktrees `.claude_stuff/` is one live copy shared by all checkouts. Only the coordinator updates `WORK_PLAN.md`, one writer at a time; workers never edit it and put results in their `worker_done` report. It never replaces a checkout's own Git state: always read your own `git status --short --untracked-files=all`, branch and HEAD; the plan's Git line describes only the main checkout's `main`.
 - Remove Orca worktrees only through Orca (`orca worktree rm` or the UI), never by deleting the folder yourself: its `.claude_stuff` is a junction to the main checkout, and a recursive delete could follow it. Orca 1.4.215's normal removal was checked on 2026-09-27 and left the main checkout's `.claude_stuff` intact; re-check after an Orca upgrade.
 
-## Verify (implementing session)
+## Verify (implementer)
 
 ```powershell
 dotnet restore
@@ -53,7 +69,11 @@ dotnet build FusionLedger.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
 git diff --check
 ```
 
-Run from this checkout's root. Report tests, build and device behavior separately; a passing build is not proof of runtime behavior.
+Run from this checkout's root. Also report the DLL SHA-256 of the build and the private-use glyph and line-ending scans. Report tests, build and device behavior separately; a passing build is not proof of runtime behavior. CI (`.github/workflows/windows-build.yml`) repeats restore, policy tests and the x64 Debug build on push and pull request.
+
+## Device check (reviewer / tester)
+
+Only after the owner has installed the build. Read the former procedure and its UI Automation pitfalls first: `git show 2614892:.claude/agents/device-verifier.md`. Confirm `Get-AppxPackage` and the DLL hash against the build, use only read-only UI Automation unless the Task lists "Authorized writes", never sign out or type a password, restore window size/theme/page, and report pass / fail / not performed per check.
 
 ## Handoff to a reviewer
 
@@ -78,4 +98,4 @@ Uncommitted and untracked changes exist only in the implementer's checkout: revi
 1. Confirm the checkout: `git rev-parse --show-toplevel`, branch, HEAD, and for uncommitted work `git status --short --untracked-files=all` plus the fingerprint. On any mismatch with the handoff, stop and report.
 2. Derive what the change must do from the owner's request, the hard rules above, the matching `.claude/rules/*.md`, `.claude_stuff/DESIGN.md` and (when a contract is involved) the Web repository's contract. Do not adopt the implementer's conclusions or test claims without checking them.
 3. Read the diff in full; re-run the policy tests or read the assertions where you can.
-4. Report findings as blocking / should-fix / nit with `file:line`, then what you did not verify. Do not edit files, the work plan or Git unless the request says so.
+4. Report findings as blocking / should-fix / nit with `file:line`, then what you did not verify. Do not edit files, the work plan or Git unless the request says so. The coordinator routes fixes to the implementer; the reviewer re-reviews until no blocking or should-fix finding remains.
