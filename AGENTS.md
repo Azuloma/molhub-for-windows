@@ -4,10 +4,13 @@ Native-first WinUI 3 client (packaged x64, .NET 10) for the MolHub web app. Inte
 
 ## Roles
 
-- **Codex is the main agent** (owner decision 2026-09-28) and works in the owner's main checkout on `main`. It talks with the owner, decides specs (asking when a decision is the owner's), researches (including the Web contract), implements, writes and updates the policy tests, runs the full verification, keeps the release docs, `DESIGN.md` and `WORK_PLAN.md`, hands over the install command and the "Authorized writes" list, does the read-only device check after the owner installs, and reports.
-- **Other agents are paused.** The multi-agent split (coordinator / implementer / structure reviewer / reviewer-tester through Orca orchestration) was stopped on 2026-09-28. Do not start Orca workers or subagents. Claude Code has no standing role and acts only on an explicit owner request.
-- **Independence:** no independent reviewer is assigned. Say so in reports ("no independent review") instead of claiming one. When the owner asks another agent to review, use "Handoff to a reviewer" and "Reviewing" below.
-- One writer at a time on a checkout. Never revert or overwrite changes you did not make.
+- **Main — Codex, GPT-6 Sol / Medium:** works with the owner, plans, decides specs (asking when a decision is the owner's), assigns and monitors work through Orca CLI, integrates results, and edits Markdown documents including release records, `DESIGN.md` and `WORK_PLAN.md`. It may make read-only checks needed for coordination. It does not edit app or Web code, run tests or builds, or operate the app on the device.
+- **Code Explorer — Codex subagent, GPT-6 Luna / Medium:** start only when a bounded read-only investigation of Windows code or the Web API contract is needed. Return a short conclusion, file and line references, and what remains unverified. Use the project definition `.codex/agents/code_explorer.toml`; if this Codex surface cannot select that role, explicitly set `model=gpt-6-luna` and `reasoning_effort=medium` when spawning and include its read-only instructions. Never silently substitute a model.
+- **Quick Implementer — independent Orca Codex worker, GPT-6 Luna / Medium:** owns small, well-scoped implementation and fixes, related policy tests and the x64 Debug build. It is not a Codex subagent.
+- **Implementer — independent Orca Claude Code worker, Claude Opus 5.5 / Medium:** owns larger implementation and complex fixes, related policy tests and the x64 Debug build.
+- **Code Reviewer — independent Orca Claude Code worker, Claude Opus 5.5 / Medium:** reviews the completed implementation independently and read-only, after the implementer stops. For uncommitted changes, review in the implementer's same worktree.
+- At most one worker or Codex subagent may actively work alongside Main. Idle Orca agent terminals may be open for the owner to manage; opening them does not assign work. Main or the owner may assign a task directly to an idle terminal; it then counts as the active worker. Workers never delegate or launch their own subagents. Start only the roles needed for a task; skip Code Explorer when the implementation scope is already clear. Give each worker a concise purpose, scope, completion criteria and checks before it starts work. One writer at a time on a checkout; never revert or overwrite changes you did not make.
+- Main confirms each independent worker's requested model and effort at launch. Orca's `worktree create --agent` has no per-call model/effort flags; use an explicit terminal command when those settings are needed (`codex --model gpt-6-luna -c model_reasoning_effort=medium` or `claude --model claude-opus-5-5 --effort medium`). Check the active session's model before work; report an unavailable model instead of substituting one. Follow the version-matched Orca CLI guide before using Orca.
 
 ## Start of every session
 
@@ -36,7 +39,7 @@ Native-first WinUI 3 client (packaged x64, .NET 10) for the MolHub web app. Inte
 
 ## What each kind of change needs
 
-- **App change:** spec (owner decisions recorded; larger work gets `.claude_stuff/specs/<name>.md`) → implementation + policy tests → release records (`.claude/rules/release.md`: csproj, manifest, `VERSION.md`, `CHANGELOG.md`, `README.md`, test version assertions) → full verification ("Verify") → `DESIGN.md` / `WORK_PLAN.md` → install hand-off → after the owner installs, the device check → report tests / build / device separately and record the result in `WORK_PLAN.md`.
+- **App change:** Main records the spec (larger work gets `.claude_stuff/specs/<name>.md`) and edits Markdown release/design records; the assigned implementer changes app code and policy tests, updates non-Markdown version fields and runs full verification ("Verify"). If Main edits docs after verification, the implementer reruns affected checks before ending work. Once the implementer stops, Code Reviewer reviews. Main integrates the reports, hands over the install command and "Authorized writes" list, and prepares a concise manual test checklist for the owner. After the owner installs, Main checks the installed package version and DLL hash read-only. Main records the owner's reported manual test results and keeps tests / build / device results separate in `WORK_PLAN.md`. Until the owner reports a result, device behavior is not performed.
 - **Instruction-only change:** no app build; check for contradictions and stale names instead.
 
 ## Other repository (MolHub Web)
@@ -79,13 +82,13 @@ dotnet build FusionLedger.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
 git diff --check
 ```
 
-Run from this checkout's root, the final x64 Debug build once. Also report the DLL SHA-256 of the build (`bin\x64\Debug\net10.0-windows10.0.19041.0\win-x64\FusionLedger.Windows.dll`) and the private-use glyph and line-ending scans. Report tests, build and device behavior separately; a passing build is not proof of runtime behavior. CI (`.github/workflows/windows-build.yml`) repeats restore, policy tests and the x64 Debug build on push and pull request. No UI test project exists yet, so state which parts were automated.
+The assigned implementer runs these commands from its checkout root, with the final x64 Debug build once. It also reports the DLL SHA-256 of the build (`bin\x64\Debug\net10.0-windows10.0.19041.0\win-x64\FusionLedger.Windows.dll`) and the private-use glyph and line-ending scans. Main reports tests, build and device behavior separately; a passing build is not proof of runtime behavior. CI (`.github/workflows/windows-build.yml`) repeats restore, policy tests and the x64 Debug build on push and pull request. No UI test project exists yet, so state which parts were automated.
 
 ## Device check
 
-Only after the owner has installed the build. Read the former procedure and its UI Automation pitfalls first: `git show 2614892:.claude/agents/device-verifier.md`. Confirm `Get-AppxPackage` and the DLL hash against the build, use only read-only UI Automation unless the request lists "Authorized writes", never sign out or type a password, restore window size/theme/page, and report pass / fail / not performed per check.
+The owner performs manual tests of the installed app. Main supplies a short checklist based on the change and known open checks, confirms the installed package version and DLL hash read-only after the owner reports installation, and records the owner's pass / fail / not performed observations as owner-reported results. Main does not operate the app. There is no standing runtime-verification agent. If the owner explicitly requests an agent-operated device check, agree on its scope first; that agent reads the former procedure and its UI Automation pitfalls (`git show 2614892:.claude/agents/device-verifier.md`), follows the "Authorized writes" rule, never types the owner's password, and restores window size/theme/page.
 
-## Handoff to a reviewer (only when the owner asks for a review)
+## Handoff to Code Reviewer
 
 ```text
 Repo / checkout: MolHub.Windows at <worktree path>, branch <name>
@@ -101,7 +104,7 @@ Not verified: <list>
 Reviewer focus: <optional>
 ```
 
-Uncommitted and untracked changes exist only in the author's checkout: review them in that same checkout, not in a new worktree. Committed work can be reviewed in any checkout at the given commits.
+The implementer stops before Code Reviewer starts. Uncommitted and untracked changes exist only in the author's checkout: review them in that same checkout, not in a new worktree. Committed work can be reviewed in any checkout at the given commits.
 
 ## Reviewing
 

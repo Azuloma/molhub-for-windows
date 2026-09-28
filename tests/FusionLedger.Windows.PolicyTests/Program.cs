@@ -1057,8 +1057,8 @@ static string SliceBetween(string text, string startMarker, string endMarker, st
     Assert(sliceStart >= 0 && sliceEnd >= 0, $"{what}: marker not found ('{(sliceStart < 0 ? startMarker : endMarker)}').");
     return text[sliceStart..sliceEnd];
 }
-var pagePartsCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Common", "PageParts.cs"));
-var centeredPageBody = SliceBetween(pagePartsCode, "public static ScrollViewer CenteredPage(FrameworkElement column, double maxWidth)", "\r\n    }", "PageParts.CenteredPage");
+var pagePartsCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Common", "PageParts.cs")).Replace("\r\n", "\n", StringComparison.Ordinal);
+var centeredPageBody = SliceBetween(pagePartsCode, "public static ScrollViewer CenteredPage(FrameworkElement column, double maxWidth)", "\n    }", "PageParts.CenteredPage");
 Assert(System.Text.RegularExpressions.Regex.IsMatch(centeredPageBody, @"new CenteredColumnPanel\s*\{\s*ColumnMaxWidth = maxWidth\s*\}")
     && centeredPageBody.Contains("Children.Add(column);", StringComparison.Ordinal)
     && centeredPageBody.Contains("new ScrollViewer", StringComparison.Ordinal)
