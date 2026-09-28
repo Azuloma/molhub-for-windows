@@ -1,4 +1,4 @@
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Chooses the MolHub icon variant for the surface it is drawn on. The source artwork is a

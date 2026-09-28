@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI.ViewManagement;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Thin desktop acrylic for title-bar flyouts, so the screen behind shows through like the Windows account menu.

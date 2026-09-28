@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Native Profile settings for approved accounts, following the web profile screen: the identity (icon, username, role),

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.11
+
+- Every internal name now uses MolHub: package identity `MolHub.Windows` (publisher `CN=MolHub`), namespace, project files, test project, theme resource keys and the WebView2 profile folder (`MolHub.WebView2`). Only the production host name of the web app keeps its original spelling.
+- Because the package identity changed, this version installs as a new app next to the earlier package instead of upgrading it. Sign in again after installing; language and theme start at their defaults. Uninstall the earlier package afterwards.
+- No Web API or bridge contract changed.
+
 ## v0.14.10
 
 - Fixed the new app icon showing black corners: the rounded corners are transparent again.
@@ -161,7 +167,7 @@
 
 ## v0.6.0
 
-- Renamed the user-facing product from Fusion Ledger for Windows to MolHub for Windows in the package display names, window and title-bar text, accessibility names and installer messages. The package identity, namespace and WebView2 profile folder are unchanged so upgrades keep sign-in data and settings.
+- Renamed the user-facing product to MolHub for Windows in the package display names, window and title-bar text, accessibility names and installer messages. The package identity, namespace and WebView2 profile folder were left unchanged at the time so upgrades kept sign-in data and settings.
 - Replaced the app icon with the MolHub mole artwork: scaled Start/taskbar/tile/store logos, `targetsize` unplated variants, dark-line `lightunplated` variants for light taskbars, and theme-aware title-bar and window icons.
 
 ## v0.5.2

@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// The first native writes, on the project screen's Work reservation card: Start work, Cancel work and Publish

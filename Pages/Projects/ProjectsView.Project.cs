@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 internal sealed partial class ProjectsView
 {

@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>An active reservation; `Base` is the head it was started from, which a publish must name again.</summary>
 public sealed record ProjectReservation(string? Username, DateTimeOffset? StartedAt, string? Base = null);

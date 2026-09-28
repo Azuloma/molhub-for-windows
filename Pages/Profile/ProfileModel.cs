@@ -3,7 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>The `/api/v1/profile` user DTO reduced to what Profile settings shows.</summary>
 public sealed record ProfileInfo(string Id, string Username, string Status, string Role, byte[]? Avatar, DateTimeOffset? CreatedAt);

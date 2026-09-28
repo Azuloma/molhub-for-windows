@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Shapes;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>The first screen of a <see cref="ProjectsView"/>: the Projects page or the Commit history page.</summary>
 internal enum ProjectsRoot

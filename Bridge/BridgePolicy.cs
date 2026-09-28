@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>What happened to a write, as reported by the web bridge or decided by the host.</summary>
 public enum BridgeOutcome

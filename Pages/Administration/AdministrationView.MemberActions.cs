@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Members writes (v0.14.7): status changes and one-time reset codes, rules in <see cref="AdminUserWriteModel"/>. Every

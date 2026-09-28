@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>Announcement card rendering shared by Server maintenance and Administration.</summary>
 internal static class AnnouncementCard

@@ -12,7 +12,7 @@ using Windows.Storage;
 using Windows.Storage.Streams;
 using WinRT.Interop;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public sealed partial class MainWindow : Window
 {

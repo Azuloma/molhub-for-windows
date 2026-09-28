@@ -1,10 +1,10 @@
 <Window
-    x:Class="FusionLedger.Windows.LoginWindow"
+    x:Class="MolHub.Windows.LoginWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     Title="">
-    <Grid x:Name="RootGrid" Background="{ThemeResource FusionSurfaceBrush}">
+    <Grid x:Name="RootGrid" Background="{ThemeResource MolHubSurfaceBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="32" />
             <RowDefinition Height="*" />
@@ -21,7 +21,7 @@
         <controls:WebView2 x:Name="LoginWebView" Grid.Row="1" AutomationProperties.Name="" />
 
         <!-- Loading, sign-out and recovery states cover the web surface until it has content. -->
-        <Grid x:Name="LoginOverlay" Grid.Row="1" Background="{ThemeResource FusionSurfaceBrush}">
+        <Grid x:Name="LoginOverlay" Grid.Row="1" Background="{ThemeResource MolHubSurfaceBrush}">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" MaxWidth="360" Padding="24,0">
                 <ProgressRing x:Name="LoginProgress" IsActive="True" Width="32" Height="32" HorizontalAlignment="Center" />
                 <TextBlock x:Name="LoginStatus"

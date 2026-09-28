@@ -2,7 +2,7 @@ using Microsoft.UI.Xaml;
 using Windows.Storage;
 using Windows.UI.ViewManagement;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>Applies a persisted theme without overriding Windows High Contrast.</summary>
 public sealed class ThemeService : IDisposable

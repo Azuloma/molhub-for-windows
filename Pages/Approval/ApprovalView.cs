@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Shapes;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// The web approval-waiting card for an account that is not approved yet: clock, amber "Awaiting approval" label,

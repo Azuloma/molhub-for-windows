@@ -30,8 +30,8 @@ function Resolve-ContainedPath {
     return $resolved
 }
 
-$candidateDirectories = @(Get-ChildItem -LiteralPath $appPackagesRoot -Directory -Filter 'FusionLedger.Windows_*_x64_Debug_Test' | Where-Object {
-    $_.Name -match '^FusionLedger\.Windows_[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+_x64_Debug_Test$'
+$candidateDirectories = @(Get-ChildItem -LiteralPath $appPackagesRoot -Directory -Filter 'MolHub.Windows_*_x64_Debug_Test' | Where-Object {
+    $_.Name -match '^MolHub\.Windows_[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+_x64_Debug_Test$'
 })
 if ([string]::IsNullOrWhiteSpace($PackageDirectory)) {
     if ($candidateDirectories.Count -ne 1) {
@@ -45,12 +45,12 @@ if ((Split-Path -Parent $packageDirectoryPath) -ne $appPackagesRoot) {
     throw "The package directory must be a direct child of $appPackagesRoot"
 }
 $packageDirectoryName = Split-Path -Leaf $packageDirectoryPath
-if ($packageDirectoryName -notmatch '^FusionLedger\.Windows_(?<version>[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)_x64_Debug_Test$') {
-    throw 'Only a generated FusionLedger.Windows x64 Debug_Test package directory is accepted.'
+if ($packageDirectoryName -notmatch '^MolHub\.Windows_(?<version>[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)_x64_Debug_Test$') {
+    throw 'Only a generated MolHub.Windows x64 Debug_Test package directory is accepted.'
 }
 $packageVersion = $Matches.version
 
-$packagePath = Resolve-ContainedPath -Path (Join-Path $packageDirectoryPath "FusionLedger.Windows_${packageVersion}_x64_Debug.msix") -Container $packageDirectoryPath -MustBeDirectory $false
+$packagePath = Resolve-ContainedPath -Path (Join-Path $packageDirectoryPath "MolHub.Windows_${packageVersion}_x64_Debug.msix") -Container $packageDirectoryPath -MustBeDirectory $false
 $dependenciesDirectory = Resolve-ContainedPath -Path (Join-Path $packageDirectoryPath 'Dependencies\x64') -Container $packageDirectoryPath -MustBeDirectory $true
 $dependencyPaths = @(Get-ChildItem -LiteralPath $dependenciesDirectory -Filter '*.msix' -File | ForEach-Object {
     Resolve-ContainedPath -Path $_.FullName -Container $dependenciesDirectory -MustBeDirectory $false

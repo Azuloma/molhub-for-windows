@@ -8,7 +8,7 @@ using Windows.Graphics;
 using Windows.System;
 using WinRT.Interop;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public sealed partial class LoginWindow : Window
 {

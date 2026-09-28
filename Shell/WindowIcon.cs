@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml;
 using Windows.UI.ViewManagement;
 using WinRT.Interop;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>Sets the caption, Alt+Tab and taskbar window icon for the current Windows app theme.</summary>
 internal static class WindowIcon

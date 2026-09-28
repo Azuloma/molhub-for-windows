@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public sealed record ManagedProject(string Id, string Name, string? OwnerId, bool Deleted);
 

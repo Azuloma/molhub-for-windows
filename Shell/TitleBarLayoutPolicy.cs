@@ -1,4 +1,4 @@
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>Pure sizing policy for the title-bar page search control.</summary>
 public static class TitleBarLayoutPolicy

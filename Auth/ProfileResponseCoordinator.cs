@@ -1,4 +1,4 @@
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Tracks asynchronous profile responses so only the newest response can update

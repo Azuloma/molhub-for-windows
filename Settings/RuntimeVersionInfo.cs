@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Web.WebView2.Core;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public sealed record RuntimeVersionSnapshot(
     string DisplayVersion,

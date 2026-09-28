@@ -1,6 +1,6 @@
 ![image 01](<https://github.com/Azuloma/molhub-for-windows/blob/main/Assets/for%20Github/image01.png>)
 
-A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.14.10** (beta prototype).
+A native-first Windows client for MolHub, built with WinUI 3. Current version: **v0.14.11** (beta prototype).
 
 The app opens a sign-in window that hosts the existing MolHub web login in WebView2. Once the production `/api/me` response confirms the signed-in user, the sign-in window closes and a native main window opens. The main window is a WinUI shell, not a wrapper around the web application.
 
@@ -38,20 +38,20 @@ Run these from the repository root:
 
 ```powershell
 dotnet restore
-dotnet run --project tests\FusionLedger.Windows.PolicyTests\FusionLedger.Windows.PolicyTests.csproj
-dotnet build FusionLedger.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
+dotnet run --project tests\MolHub.Windows.PolicyTests\MolHub.Windows.PolicyTests.csproj
+dotnet build MolHub.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
 ```
 
 - The policy tests check navigation and sign-in rules, settings validation, `/api/me` parsing, and required structure in the source, XAML, version files and resources. A passing run prints a single summary line.
-- The build creates an unsigned MSIX in `AppPackages\FusionLedger.Windows_<version>_x64_Debug_Test\`.
+- The build creates an unsigned MSIX in `AppPackages\MolHub.Windows_<version>_x64_Debug_Test\`.
 
 ## Install a development build
 
 Use Windows PowerShell 5.1 or later. First enable **Settings > System > For developers > Developer Mode**. Then check and install the package you built:
 
 ```powershell
-.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.10.0_x64_Debug_Test"
-.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.10.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\MolHub.Windows_0.14.11.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\MolHub.Windows_0.14.11.0_x64_Debug_Test"
 ```
 
 - `-WhatIf` only checks that the package and its x64 dependency packages are present; nothing is installed.
@@ -67,10 +67,10 @@ This package is unsigned and meant for development only. Windows SmartScreen may
 - **Sign-in window:** a compact, fixed-size dialog with a 481 × 683 DIP client area (32 DIP title bar with only a close button). It scales with the monitor's DPI, stays inside the work area and opens centered; a progress ring covers the web view until the first page load.
 - **Windows:** `LoginWindow` hosts the only visible WebView2. `MainWindow` is fully native (no WebView2 in its XAML) and changes pages by replacing the content of `ContentFrame`.
 - **Data bridge:** `WebBridgeClient` runs a hidden WebView2 controller in its own invisible window. It loads only `https://fusion-ledger.desase0175.workers.dev/webview-bridge` (the canonical path of the web app's bridge page) and exchanges `{ command, requestId, payload }` messages with it; the page calls `/api/v1` with the session cookie. Both WebViews share one environment (`WebViewProfile`), so the engine shares the HttpOnly cookie without the app reading it. Writes that time out or lose the bridge are reported as "outcome unknown" and never resent automatically.
-- **Sign-in data:** the WebView2 profile is stored at `ApplicationData.Current.LocalFolder\FusionLedger.WebView2`. For an installed package this is normally `%LOCALAPPDATA%\Packages\FusionLedger.Windows_*\LocalState\FusionLedger.WebView2`.
+- **Sign-in data:** the WebView2 profile is stored at `ApplicationData.Current.LocalFolder\MolHub.WebView2`. For an installed package this is normally `%LOCALAPPDATA%\Packages\MolHub.Windows_*\LocalState\MolHub.WebView2`.
 - **User details:** the app reads only an exact HTTPS `GET /api/me` response. It accepts bounded JSON with a username, a known status (`pending`, `approved`, `rejected`, `suspended`) and role (`member`, `admin`), plus an optional small PNG avatar.
 - **Settings:** only the `ui.language` and `ui.theme` keys are stored in `LocalSettings`. Invalid values fall back to English and System. Theme changes apply at once; a language change applies after restarting the app.
-- **Name and icon:** the user-facing name is MolHub for Windows. Internal identifiers (the `FusionLedger.Windows` package identity, namespace, WebView2 profile folder and production host name) are unchanged so upgrades keep the sign-in profile and settings. The app icon (Start, taskbar, tiles and the package logo) is the mole in a hard hat, white lines on a red rounded square, used on light and dark surfaces alike. The window icon (title bar) keeps the earlier white line drawing, with a dark-line variant on light surfaces.
+- **Name and icon:** the app is MolHub for Windows throughout: package identity `MolHub.Windows`, namespace, project and WebView2 profile folder (since v0.14.11). Only the production host name of the web app keeps its original spelling. The app icon (Start, taskbar, tiles and the package logo) is the mole in a hard hat, white lines on a red rounded square, used on light and dark surfaces alike. The window icon (title bar) keeps the earlier white line drawing, with a dark-line variant on light surfaces.
 - **Accessibility:** English and Japanese resources, Light, Dark and High Contrast themes, keyboard shortcuts (Ctrl+K search, Ctrl+, settings, Alt+N notifications, Alt+Left back) and localized accessibility names.
 
 ## Security boundary
@@ -90,7 +90,7 @@ This application is vibe-coded using Claude Opus 5.5 and OpenAI GPT-5.6 Sol and 
 
 ## Versioning
 
-The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.10.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
+The `<Version>` element in `MolHub.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.11.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## License
 

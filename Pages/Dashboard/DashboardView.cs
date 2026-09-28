@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Streams;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Native Dashboard: workspace status, top projects, activity and the recent-commit feed from `/api/v1/dashboard`,

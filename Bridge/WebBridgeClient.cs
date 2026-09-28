@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using Microsoft.Web.WebView2.Core;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public enum BridgeConnectionState
 {

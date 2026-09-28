@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public sealed record AuthenticatedUser(
     string Username,

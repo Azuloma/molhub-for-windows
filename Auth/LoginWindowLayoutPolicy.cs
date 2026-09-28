@@ -1,4 +1,4 @@
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Sizes the sign-in window like a compact Windows account dialog: a 481 x 683 DIP client area

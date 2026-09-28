@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using FusionLedger.Windows;
+using MolHub.Windows;
 
 static void Assert(bool condition, string message)
 {
@@ -46,7 +46,7 @@ coordinator.Invalidate();
 Assert(!coordinator.IsCurrent(second), "Logout invalidation must stale an in-flight response.");
 
 var root = new DirectoryInfo(AppContext.BaseDirectory);
-while (root is not null && !File.Exists(Path.Combine(root.FullName, "FusionLedger.Windows.csproj"))) root = root.Parent;
+while (root is not null && !File.Exists(Path.Combine(root.FullName, "MolHub.Windows.csproj"))) root = root.Parent;
 Assert(root is not null, "Source root must be discoverable.");
 var sourceRoot = root!.FullName;
 // ----- Administration (v0.14.5 reads, v0.14.7 Members writes) -----
@@ -185,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.10</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.10.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.10.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.10.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.11</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.11.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.11.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.11.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.10", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.10", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.10", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.9", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.10 above v0.14.9 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.11", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.11", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.11", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.10", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.11 above v0.14.10 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -205,11 +205,28 @@ var manifest = File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")
 Assert(manifest.Contains("<DisplayName>MolHub for Windows</DisplayName>", StringComparison.Ordinal)
     && manifest.Contains("<PublisherDisplayName>MolHub</PublisherDisplayName>", StringComparison.Ordinal)
     && manifest.Contains("uap:VisualElements AppListEntry=\"default\" DisplayName=\"MolHub for Windows\"", StringComparison.Ordinal), "Package display names must use the MolHub brand.");
-Assert(manifest.Contains("<Identity Name=\"FusionLedger.Windows\"", StringComparison.Ordinal), "Package identity must stay stable so upgrades keep the sign-in profile and settings.");
+// v0.14.11: the package identity became MolHub.Windows. The Publisher keeps the OID that marks an unsigned package.
+Assert(manifest.Contains("<Identity Name=\"MolHub.Windows\" Publisher=\"CN=MolHub, OID.2.25.311729368913984317654407730594956997722=1\"", StringComparison.Ordinal),
+    "Package identity must be MolHub.Windows with the unsigned-package publisher.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
-    Assert(!resource.Contains("Fusion Ledger", StringComparison.Ordinal) && resource.Contains("<value>MolHub for Windows</value>", StringComparison.Ordinal), $"User-facing strings must use the MolHub brand: {locale}");
+    Assert(resource.Contains("<value>MolHub for Windows</value>", StringComparison.Ordinal), $"User-facing strings must use the MolHub brand: {locale}");
+}
+// v0.14.11: the retired product name must not come back in source, docs or file names; only the production host keeps it.
+// The pattern is split so this file does not match itself.
+var retiredName = new System.Text.RegularExpressions.Regex("fu" + "sion[ ._-]?led" + "ger", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+var productionHost = new Uri(NavigationPolicy.AppUrl).Host;
+var skippedFolders = new[] { "bin", "obj", "AppPackages", ".git", ".vs", ".claude" };
+foreach (var file in Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories))
+{
+    var relative = Path.GetRelativePath(sourceRoot, file);
+    if (relative.Split(Path.DirectorySeparatorChar).Any(part => skippedFolders.Contains(part, StringComparer.OrdinalIgnoreCase))) continue;
+    if (Path.GetFileName(file) == "CLAUDE.md") continue;
+    Assert(!retiredName.IsMatch(relative), $"The retired product name must not appear in a file name: {relative}");
+    if (Path.GetExtension(file).ToLowerInvariant() is not (".cs" or ".xaml" or ".csproj" or ".appxmanifest" or ".manifest" or ".pubxml" or ".resw" or ".ps1" or ".md" or ".json" or ".gitignore")) continue;
+    var text = File.ReadAllText(file).Replace(productionHost, string.Empty, StringComparison.OrdinalIgnoreCase);
+    Assert(!retiredName.IsMatch(text), $"The retired product name must not appear: {relative}");
 }
 foreach (var logo in new[] { "Square44x44Logo.scale-100.png", "Square44x44Logo.targetsize-24_altform-unplated.png", "Square44x44Logo.targetsize-24_altform-lightunplated.png",
     "Square150x150Logo.scale-100.png", "Wide310x150Logo.scale-100.png", "SmallTile.scale-100.png", "LargeTile.scale-100.png", "StoreLogo.scale-100.png",
@@ -217,10 +234,9 @@ foreach (var logo in new[] { "Square44x44Logo.scale-100.png", "Square44x44Logo.t
 {
     Assert(File.Exists(Path.Combine(sourceRoot, "Assets", logo)), $"Icon asset is missing: {logo}");
 }
-Assert(!File.Exists(Path.Combine(sourceRoot, "Assets", "fusion-ledger_ico.png")) && !manifest.Contains("fusion-ledger_ico", StringComparison.Ordinal), "The retired Fusion Ledger icon must not be referenced.");
 // v0.14.9: the app icon (package logos) and the window icon (AppIconOn*) are separate artwork; only the package logos changed.
 Assert(!manifest.Contains("AppIconOn", StringComparison.Ordinal)
-    && File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<ApplicationIcon>Assets\\AppIconOnDark.ico</ApplicationIcon>", StringComparison.Ordinal),
+    && File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<ApplicationIcon>Assets\\AppIconOnDark.ico</ApplicationIcon>", StringComparison.Ordinal),
     "Package logos must stay separate from the window icon files.");
 Assert(AppIconAssets.TitleBarImageUri(true) == AppIconAssets.OnLightImageUri && AppIconAssets.TitleBarImageUri(false) == AppIconAssets.OnDarkImageUri
     && AppIconAssets.WindowIconFile(true) == AppIconAssets.OnLightIconFile && AppIconAssets.WindowIconFile(false) == AppIconAssets.OnDarkIconFile, "Icon variants must follow surface lightness.");
@@ -1143,4 +1159,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.10 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.11 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Storage.Streams;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Shows a validated PNG avatar in a PersonPicture. A picture that is out of the tree when the theme changes comes

@@ -1,8 +1,8 @@
 <Application
-    x:Class="FusionLedger.Windows.App"
+    x:Class="MolHub.Windows.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:FusionLedger.Windows">
+    xmlns:local="using:MolHub.Windows">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -10,35 +10,35 @@
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="FusionAccentBrush" Color="#B83E47" />
-                    <SolidColorBrush x:Key="FusionAccentForegroundBrush" Color="#FFFFFFFF" />
-                    <SolidColorBrush x:Key="FusionAccentSubtleBrush" Color="#1AB83E47" />
-                    <SolidColorBrush x:Key="FusionChromeBrush" Color="#F7F4F4" />
-                    <SolidColorBrush x:Key="FusionSurfaceBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="MolHubAccentBrush" Color="#B83E47" />
+                    <SolidColorBrush x:Key="MolHubAccentForegroundBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="MolHubAccentSubtleBrush" Color="#1AB83E47" />
+                    <SolidColorBrush x:Key="MolHubChromeBrush" Color="#F7F4F4" />
+                    <SolidColorBrush x:Key="MolHubSurfaceBrush" Color="#FFFFFFFF" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="FusionAccentBrush" Color="#EF7C82" />
-                    <SolidColorBrush x:Key="FusionAccentForegroundBrush" Color="#3A1114" />
-                    <SolidColorBrush x:Key="FusionAccentSubtleBrush" Color="#25EF7C82" />
-                    <SolidColorBrush x:Key="FusionChromeBrush" Color="#2A2223" />
-                    <SolidColorBrush x:Key="FusionSurfaceBrush" Color="#20191A" />
+                    <SolidColorBrush x:Key="MolHubAccentBrush" Color="#EF7C82" />
+                    <SolidColorBrush x:Key="MolHubAccentForegroundBrush" Color="#3A1114" />
+                    <SolidColorBrush x:Key="MolHubAccentSubtleBrush" Color="#25EF7C82" />
+                    <SolidColorBrush x:Key="MolHubChromeBrush" Color="#2A2223" />
+                    <SolidColorBrush x:Key="MolHubSurfaceBrush" Color="#20191A" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <!-- Use the OS-provided high-contrast highlight pair; never hard-code
                          both badge foreground and background to the same color. -->
-                    <StaticResource x:Key="FusionAccentBrush" ResourceKey="SystemControlHighlightAltAccentBrush" />
-                    <StaticResource x:Key="FusionAccentForegroundBrush" ResourceKey="SystemControlHighlightAltAccentBrush" />
-                    <StaticResource x:Key="FusionAccentSubtleBrush" ResourceKey="SystemControlHighlightAccentBrush" />
-    <StaticResource x:Key="FusionChromeBrush" ResourceKey="SystemControlPageBackgroundChromeLowBrush" />
-    <StaticResource x:Key="FusionSurfaceBrush" ResourceKey="SystemControlPageBackgroundBaseLowBrush" />
+                    <StaticResource x:Key="MolHubAccentBrush" ResourceKey="SystemControlHighlightAltAccentBrush" />
+                    <StaticResource x:Key="MolHubAccentForegroundBrush" ResourceKey="SystemControlHighlightAltAccentBrush" />
+                    <StaticResource x:Key="MolHubAccentSubtleBrush" ResourceKey="SystemControlHighlightAccentBrush" />
+    <StaticResource x:Key="MolHubChromeBrush" ResourceKey="SystemControlPageBackgroundChromeLowBrush" />
+    <StaticResource x:Key="MolHubSurfaceBrush" ResourceKey="SystemControlPageBackgroundBaseLowBrush" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
-            <x:Double x:Key="FusionSpacing4">4</x:Double>
-            <x:Double x:Key="FusionSpacing8">8</x:Double>
-            <x:Double x:Key="FusionSpacing12">12</x:Double>
-            <x:Double x:Key="FusionSpacing16">16</x:Double>
-            <x:Double x:Key="FusionSpacing24">24</x:Double>
-            <x:Double x:Key="FusionSpacing40">40</x:Double>
+            <x:Double x:Key="MolHubSpacing4">4</x:Double>
+            <x:Double x:Key="MolHubSpacing8">8</x:Double>
+            <x:Double x:Key="MolHubSpacing12">12</x:Double>
+            <x:Double x:Key="MolHubSpacing16">16</x:Double>
+            <x:Double x:Key="MolHubSpacing24">24</x:Double>
+            <x:Double x:Key="MolHubSpacing40">40</x:Double>
 
             <!-- Dashboard building blocks. Pages are built in code, so ThemeResource lookups live in these styles
                  and follow the RootGrid theme (Light, Dark or High Contrast). -->
@@ -59,20 +59,20 @@
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
             <Style x:Key="DashboardAccentTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource FusionAccentBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource MolHubAccentBrush}" />
             </Style>
             <Style x:Key="DashboardIconStyle" TargetType="FontIcon">
                 <Setter Property="FontFamily" Value="{StaticResource SymbolThemeFontFamily}" />
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
             <Style x:Key="DashboardVersionBadgeStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource FusionAccentSubtleBrush}" />
+                <Setter Property="Background" Value="{ThemeResource MolHubAccentSubtleBrush}" />
                 <Setter Property="CornerRadius" Value="4" />
                 <Setter Property="Padding" Value="8,3" />
                 <Setter Property="VerticalAlignment" Value="Center" />
             </Style>
             <Style x:Key="DashboardVersionTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource FusionAccentBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource MolHubAccentBrush}" />
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
             <Style x:Key="DashboardIdChipStyle" TargetType="Border">

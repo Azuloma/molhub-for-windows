@@ -1,4 +1,4 @@
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>Validation rules for the small, intentionally fixed UI settings schema.</summary>
 public static class SettingsPolicy

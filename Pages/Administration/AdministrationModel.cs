@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public sealed record AdminRequest(string Id, string ProjectName, string Kind, string Status, string Reason, string Requester, DateTimeOffset? CreatedAt);
 public sealed record AdminProject(string Id, string Name, bool Deleted, DateTimeOffset? DeletedAt, bool ReservationPresent, string? Holder, DateTimeOffset? ReservationStartedAt);

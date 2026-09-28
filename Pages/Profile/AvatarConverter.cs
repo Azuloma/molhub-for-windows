@@ -5,7 +5,7 @@ using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
 using WinRT.Interop;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Turns a picked image into an icon the server accepts: the image is decoded (EXIF orientation respected), scaled so

@@ -1,7 +1,7 @@
 using Microsoft.Web.WebView2.Core;
 using Windows.Storage;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// The single persistent WebView2 environment shared by the sign-in window and the hidden data bridge, so the
@@ -9,7 +9,7 @@ namespace FusionLedger.Windows;
 /// </summary>
 internal static class WebViewProfile
 {
-    public const string FolderName = "FusionLedger.WebView2";
+    public const string FolderName = "MolHub.WebView2";
 
     private static Task<CoreWebView2Environment>? _environment;
 

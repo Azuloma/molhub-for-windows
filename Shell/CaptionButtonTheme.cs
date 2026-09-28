@@ -2,7 +2,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.UI.ViewManagement;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Keeps the system-drawn caption buttons in the app theme. They follow the Windows app mode by default, so a

@@ -3,8 +3,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
-    <RootNamespace>FusionLedger.Windows</RootNamespace>
-    <Version>0.14.10</Version>
+    <RootNamespace>MolHub.Windows</RootNamespace>
+    <Version>0.14.11</Version>
     <Product>MolHub for Windows</Product>
     <AssemblyTitle>MolHub for Windows</AssemblyTitle>
     <ApplicationIcon>Assets\AppIconOnDark.ico</ApplicationIcon>

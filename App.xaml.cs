@@ -2,7 +2,7 @@ using Microsoft.UI.Xaml;
 using Windows.Globalization;
 using Windows.Storage;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public partial class App : Application
 {

@@ -1,4 +1,4 @@
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>
 /// Chooses whether a title-bar flyout opens above its button. WinUI positions windowed flyouts against the

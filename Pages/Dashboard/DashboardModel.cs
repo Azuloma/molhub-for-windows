@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 public sealed record DashboardReservation(string? Username, DateTimeOffset? StartedAt);
 

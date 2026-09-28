@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>The member writes the web admin panel offers (`setUserStatus` and `issueResetCode`).</summary>
 public enum MemberAction

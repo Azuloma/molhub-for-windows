@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>The Discord destination form as typed (server and channel ids, notification language, reason, consent).</summary>
 public sealed record DiscordDraft(string Guild, string Channel, string Locale, string Reason, bool Consent);

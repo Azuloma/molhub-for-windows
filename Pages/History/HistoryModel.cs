@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace FusionLedger.Windows;
+namespace MolHub.Windows;
 
 /// <summary>Counts over the commits matching the current filters (`summary.total/projects/versions`).</summary>
 public sealed record HistorySummary(int Total, int Projects, int Versions);
