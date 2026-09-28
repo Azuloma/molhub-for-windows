@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.14.10
+
+- Fixed the new app icon showing black corners: the rounded corners are transparent again.
+- Made the app icon easier to see at small sizes (app list, taskbar): it now fills its square like other app icons, and below 64 pixels the white lines are drawn thicker so they don't fade into the red. Tiles keep their earlier padding; the window icon is unchanged.
+
+## v0.14.9
+
+- New app icon: the mole in a hard hat, white lines on a red rounded square. It replaces the package logos used by Start, the taskbar, tiles and the app list (every scale and target size, including the light and dark unplated variants), with the same sizes and padding as before.
+- The window icon (title bar and `AppIconOnDark` / `AppIconOnLight`) is unchanged.
+- No Web API or bridge contract changed.
+
 ## v0.14.8
 
 - Changed the page transition in the main window: switching sections now slides the new page straight up from below instead of diagonally from the lower right.

@@ -185,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.8</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.8.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.8.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.8.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.10</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.10.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.10.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.10.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.8", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.8", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.8", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.7", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.8 above v0.14.7 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.10", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.10", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.10", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.9", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.10 above v0.14.9 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -218,6 +218,10 @@ foreach (var logo in new[] { "Square44x44Logo.scale-100.png", "Square44x44Logo.t
     Assert(File.Exists(Path.Combine(sourceRoot, "Assets", logo)), $"Icon asset is missing: {logo}");
 }
 Assert(!File.Exists(Path.Combine(sourceRoot, "Assets", "fusion-ledger_ico.png")) && !manifest.Contains("fusion-ledger_ico", StringComparison.Ordinal), "The retired Fusion Ledger icon must not be referenced.");
+// v0.14.9: the app icon (package logos) and the window icon (AppIconOn*) are separate artwork; only the package logos changed.
+Assert(!manifest.Contains("AppIconOn", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<ApplicationIcon>Assets\\AppIconOnDark.ico</ApplicationIcon>", StringComparison.Ordinal),
+    "Package logos must stay separate from the window icon files.");
 Assert(AppIconAssets.TitleBarImageUri(true) == AppIconAssets.OnLightImageUri && AppIconAssets.TitleBarImageUri(false) == AppIconAssets.OnDarkImageUri
     && AppIconAssets.WindowIconFile(true) == AppIconAssets.OnLightIconFile && AppIconAssets.WindowIconFile(false) == AppIconAssets.OnDarkIconFile, "Icon variants must follow surface lightness.");
 Assert(mainCode.Contains("ActualThemeChanged", StringComparison.Ordinal) && mainCode.Contains("WindowIcon.Apply(this)", StringComparison.Ordinal)
@@ -1139,4 +1143,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.8 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.10 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

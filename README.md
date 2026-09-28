@@ -1,6 +1,6 @@
 ![image 01](<https://github.com/Azuloma/molhub-for-windows/blob/main/Assets/for%20Github/image01.png>)
 
-A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.14.8** (beta prototype).
+A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.14.10** (beta prototype).
 
 The app opens a sign-in window that hosts the existing MolHub web login in WebView2. Once the production `/api/me` response confirms the signed-in user, the sign-in window closes and a native main window opens. The main window is a WinUI shell, not a wrapper around the web application.
 
@@ -50,8 +50,8 @@ dotnet build FusionLedger.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
 Use Windows PowerShell 5.1 or later. First enable **Settings > System > For developers > Developer Mode**. Then check and install the package you built:
 
 ```powershell
-.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.8.0_x64_Debug_Test"
-.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.8.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.10.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.10.0_x64_Debug_Test"
 ```
 
 - `-WhatIf` only checks that the package and its x64 dependency packages are present; nothing is installed.
@@ -70,7 +70,7 @@ This package is unsigned and meant for development only. Windows SmartScreen may
 - **Sign-in data:** the WebView2 profile is stored at `ApplicationData.Current.LocalFolder\FusionLedger.WebView2`. For an installed package this is normally `%LOCALAPPDATA%\Packages\FusionLedger.Windows_*\LocalState\FusionLedger.WebView2`.
 - **User details:** the app reads only an exact HTTPS `GET /api/me` response. It accepts bounded JSON with a username, a known status (`pending`, `approved`, `rejected`, `suspended`) and role (`member`, `admin`), plus an optional small PNG avatar.
 - **Settings:** only the `ui.language` and `ui.theme` keys are stored in `LocalSettings`. Invalid values fall back to English and System. Theme changes apply at once; a language change applies after restarting the app.
-- **Name and icon:** the user-facing name is MolHub for Windows. Internal identifiers (the `FusionLedger.Windows` package identity, namespace, WebView2 profile folder and production host name) are unchanged so upgrades keep the sign-in profile and settings. The icon is a white line drawing; light surfaces (light taskbar and Start, the Light app theme) use a dark-line variant generated from the same artwork.
+- **Name and icon:** the user-facing name is MolHub for Windows. Internal identifiers (the `FusionLedger.Windows` package identity, namespace, WebView2 profile folder and production host name) are unchanged so upgrades keep the sign-in profile and settings. The app icon (Start, taskbar, tiles and the package logo) is the mole in a hard hat, white lines on a red rounded square, used on light and dark surfaces alike. The window icon (title bar) keeps the earlier white line drawing, with a dark-line variant on light surfaces.
 - **Accessibility:** English and Japanese resources, Light, Dark and High Contrast themes, keyboard shortcuts (Ctrl+K search, Ctrl+, settings, Alt+N notifications, Alt+Left back) and localized accessibility names.
 
 ## Security boundary
@@ -90,7 +90,7 @@ This application is vibe-coded using Claude Opus 5.5 and OpenAI GPT-5.6 Sol and 
 
 ## Versioning
 
-The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.8.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
+The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.10.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## License
 
