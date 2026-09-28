@@ -348,7 +348,7 @@ internal sealed class DashboardView : UserControl
         header.Children.Add(history);
 
         var refreshContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        refreshContent.Children.Add(new FontIcon { Glyph = "\uE72C", FontSize = 14, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] });
+        refreshContent.Children.Add(new FontIcon { Glyph = "\uE72C", FontSize = 14, FontFamily = PageParts.SymbolFont });
         refreshContent.Children.Add(new TextBlock { Text = _l("Dashboard_Refresh") });
         _refreshButton = new Button { Content = refreshContent, Style = Res("SubtleButtonStyle") };
         AutomationProperties.SetName(_refreshButton, _l("Dashboard_Refresh"));
@@ -419,7 +419,7 @@ internal sealed class DashboardView : UserControl
         var shortId = DashboardModel.ShortId(id);
         var chip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
         chip.Children.Add(new TextBlock { Text = shortId, Style = Res("DashboardIdTextStyle") });
-        var icon = new FontIcon { Glyph = "\uE8C8", FontSize = 12, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] };
+        var icon = new FontIcon { Glyph = "\uE8C8", FontSize = 12, FontFamily = PageParts.SymbolFont };
         var copy = new Button { Content = icon, Style = Res("SubtleButtonStyle"), Padding = new Thickness(6, 4, 6, 4), MinWidth = 0, MinHeight = 0 };
         var copyName = string.Format(_l("Dashboard_CopyIdFormat"), shortId);
         AutomationProperties.SetName(copy, copyName);
@@ -465,7 +465,7 @@ internal sealed class DashboardView : UserControl
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         content.Children.Add(new TextBlock { Text = _l(key) });
-        content.Children.Add(new FontIcon { Glyph = "\uE72A", FontSize = 12, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] });
+        content.Children.Add(new FontIcon { Glyph = "\uE72A", FontSize = 12, FontFamily = PageParts.SymbolFont });
         var button = new HyperlinkButton { Content = content, Margin = margin, VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetName(button, _l(key));
         button.Click += (_, _) => action();

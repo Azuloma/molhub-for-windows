@@ -387,6 +387,10 @@ Assert(avatarCode.Contains("picture.Loaded +=", StringComparison.Ordinal) && ava
     && dashboardCode.Contains("AvatarImage.Attach(picture, avatar, 56)", StringComparison.Ordinal)
     && mainCode.Contains("AvatarImage.Attach(ProfilePicture, avatar, 64)", StringComparison.Ordinal) && mainCode.Contains("AvatarImage.Attach(AccountPicture, avatar, 96)", StringComparison.Ordinal),
     "Avatars must be decoded again whenever a picture is loaded or its theme changes, so a theme switch never leaves only initials.");
+var symbolFontReaders = Directory.GetFiles(Path.Combine(sourceRoot, "Pages"), "*.cs", SearchOption.AllDirectories)
+    .Where(file => File.ReadAllText(file).Contains("Resources[\"SymbolThemeFontFamily\"]", StringComparison.Ordinal))
+    .Select(Path.GetFileName).ToList();
+Assert(symbolFontReaders is ["PageParts.cs"], "Pages must take the symbol font from PageParts.SymbolFont instead of reading SymbolThemeFontFamily themselves.");
 var captionCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "CaptionButtonTheme.cs"));
 Assert(captionCode.Contains("TitleBar.PreferredTheme", StringComparison.Ordinal) && captionCode.Contains("root.ActualThemeChanged +=", StringComparison.Ordinal)
     && captionCode.Contains("TitleBarTheme.UseDefaultAppMode", StringComparison.Ordinal)
