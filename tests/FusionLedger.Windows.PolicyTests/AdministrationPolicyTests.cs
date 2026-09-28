@@ -53,9 +53,20 @@ internal static class AdministrationPolicyTests
         foreach (var command in allowed) Check(model.Contains("\"" + command + "\"", StringComparison.Ordinal), $"missing read command {command}.");
         var commands = System.Text.RegularExpressions.Regex.Matches(administrationCode, "\\\"(admin[A-Z][A-Za-z0-9]*)\\\"")
             .Select(match => match.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
-        Check(commands.SetEquals(allowed), "Administration code may reference only the six read commands.");
+        Check(commands.SetEquals(allowed), "Administration code may reference only the six admin read commands.");
         foreach (var write in new[] { "adminApprove", "adminReject", "adminSuspend", "adminCreateProject", "adminDeleteProject", "adminRestoreProject", "adminDiscordAction", "adminMaintenanceStart", "adminMaintenanceEnd", "adminRetryDelivery", "adminResetCode", "adminCreateAdmin" })
             Check(!administrationCode.Contains(write, StringComparison.Ordinal), $"write command {write} must not occur in Administration.");
+        // v0.14.7: the only bridge commands named anywhere in Administration are the six reads plus the two Members writes.
+        var memberWrites = new[] { "setUserStatus", "issueResetCode" };
+        var bridgeLiterals = System.Text.RegularExpressions.Regex.Matches(administrationCode, "\"([A-Za-z]+)\"")
+            .Select(match => match.Groups[1].Value).Where(BridgePolicy.IsKnownCommand).ToHashSet(StringComparer.Ordinal);
+        // "history" is also the adminMaintenance DTO key (AdministrationModel.ParseMaintenance), not a command sent from here.
+        bridgeLiterals.Remove("history");
+        Check(model.Contains("Items(data, \"history\", 100)", StringComparison.Ordinal)
+            && bridgeLiterals.SetEquals(allowed.Concat(memberWrites)) && memberWrites.All(BridgePolicy.IsWrite)
+            && bridgeLiterals.Where(BridgePolicy.IsWrite).ToHashSet(StringComparer.Ordinal).SetEquals(memberWrites),
+            "Administration may send only the six read commands, setUserStatus and issueResetCode (no other writes or aliases).");
+        AdminUserWritePolicyTests.Run(sourceRoot, administrationCode, shell);
         Check(model.Contains("ValueKind == JsonValueKind.Number", StringComparison.Ordinal) && model.Contains("ProjectsModel.Paging", StringComparison.Ordinal), "paging must safely parse numeric meta and null nextOffset.");
         Check(shell.Contains("NativePage.Administration) return CreateAdministrationPage()", StringComparison.Ordinal)
             && shell.Contains("_administration?.UserChanged()", StringComparison.Ordinal) && shell.Contains("_administration?.MarkStale()", StringComparison.Ordinal), "administration cache hooks and route are required.");
@@ -139,7 +150,7 @@ internal static class AdministrationPolicyTests
             .Concat(new[] { "approved", "rejected", "suspended", "force_release", "reset_code_issued", "password_reset", "project_created", "admin_created", "admin_recovered", "project_deleted", "project_restored", "auth_smoke_test", "discord_linked", "discord_disabled", "discord_retry", "discord_commands_registered", "discord_commands_migrated" }.Select(action => "Admin_Audit_" + action))
             .Concat(new[] { "pending", "sending", "sent", "failed", "cancelled" }.Select(status => "Admin_Discord_Status_" + status));
         foreach (var key in requiredKeys) Check(localizedAdminKeys["en-US"].Contains(key), $"both locales must define {key}.");
-        Check(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.6</Version>", StringComparison.Ordinal)
-            && File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.6.0\"", StringComparison.Ordinal), "release version must be v0.14.6.");
+        Check(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.7</Version>", StringComparison.Ordinal)
+            && File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.7.0\"", StringComparison.Ordinal), "release version must be v0.14.7.");
     }
 }

@@ -474,7 +474,10 @@ public sealed partial class MainWindow : Window
         _administration ??= new AdministrationView(L, ReadLanguage(),
             (command, payload) => _bridge.RequestAsync(command, payload),
             SignOutWhenWritesFinish,
-            UpdateBackButton);
+            UpdateBackButton,
+            () => _user,
+            _writeGate,
+            OnWorkChanged);
         _ = _administration.EnsureLoadedAsync();
         return _administration;
     }

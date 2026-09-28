@@ -41,9 +41,14 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
     private string _selected = AdministrationModel.DefaultSection;
 
     public AdministrationView(Func<string, string> localize, string language,
-        Func<string, JsonObject?, Task<BridgeResult>> request, Action signInAgain, Action navigationChanged)
+        Func<string, JsonObject?, Task<BridgeResult>> request, Action signInAgain, Action navigationChanged,
+        Func<AuthenticatedUser> currentUser, WriteGate gate, Action workChanged)
     {
         _p = new PageParts(localize); _language = language; _request = request; _signInAgain = signInAgain; _navigationChanged = navigationChanged;
+        _currentUser = currentUser; _gate = gate; _workChanged = workChanged;
+        AutomationProperties.SetName(_writeProgress, L("Work_Sending"));
+        _status.Closed += (_, _) => _memberNoticeShown = false;
+        Loaded += (_, _) => ShowPendingMemberNotice();
         _refresh = _p.SubtleButton(L("Dashboard_Refresh"), RefreshGlyph, () => _ = LoadSectionAsync(_selected, false));
         var title = new Grid { ColumnSpacing = 12 };
         title.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -62,8 +67,9 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
             if (_sections.SelectedItem is not ListViewItem { Tag: string section } || section == _selected) return;
             _activeRequestGeneration++;
             _refresh.IsEnabled = true; _more.IsEnabled = true;
-            _status.IsOpen = false; _status.ActionButton = null;
+            _status.IsOpen = false; _status.ActionButton = null; _memberNoticeShown = false;
             _selected = section; _loadFailed = false; RenderSelectedSafely();
+            ShowPendingMemberNotice();
             if (!_loadedAt.TryGetValue(section, out var loaded) || DateTimeOffset.Now - loaded > StaleAfter) _ = LoadSectionAsync(section, false);
         };
         _sections.SelectedIndex = 0;
@@ -79,7 +85,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         var layout = new TwoColumnLayout(main, sectionPanel, 240, true, true);
         layout.Apply(1280);
         var root = new StackPanel { Spacing = 16, Padding = new Thickness(32, 28, 32, 32) };
-        root.Children.Add(title); root.Children.Add(_p.Secondary(L("Admin_Intro"))); root.Children.Add(_status); root.Children.Add(layout.Element);
+        root.Children.Add(title); root.Children.Add(_p.Secondary(L("Admin_Intro"))); root.Children.Add(_status); root.Children.Add(_writeProgress); root.Children.Add(layout.Element);
         root.SizeChanged += (_, e) => layout.Apply(e.NewSize.Width);
         _scroll = PageParts.CenteredPage(root, 1280);
         Content = _scroll;
@@ -106,7 +112,8 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         return row;
     }
 
-    private async Task LoadSectionAsync(string section, bool append)
+    /// <summary>Loads one section; true when its data was stored (a late reply for another section or load returns false).</summary>
+    private async Task<bool> LoadSectionAsync(string section, bool append)
     {
         var generation = _generations.GetValueOrDefault(section) + 1; _generations[section] = generation;
         var activeGeneration = ++_activeRequestGeneration;
@@ -125,14 +132,15 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
             LogFailure("request", section, ex);
             result = null;
         }
-        if (_generations.GetValueOrDefault(section) != generation || _activeRequestGeneration != activeGeneration || _selected != section) return;
-        _refresh.IsEnabled = true; _more.IsEnabled = true;
+        if (_generations.GetValueOrDefault(section) != generation || _activeRequestGeneration != activeGeneration || _selected != section) return false;
+        // A running member write keeps Refresh and Load more disabled until its own reload has finished.
+        _refresh.IsEnabled = !_memberWriteBusy; _more.IsEnabled = !_memberWriteBusy;
         if (result is null)
         {
             _loadFailed = true;
             ShowErrorFor(null);
             RenderSelectedSafely();
-            return;
+            return false;
         }
         if (!result.Ok)
         {
@@ -149,7 +157,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
             }
             else ShowErrorFor(result);
             if (section == _selected) RenderSelectedSafely();
-            return;
+            return !_loadFailed;
         }
         _forbidden = false;
         bool valid;
@@ -177,14 +185,16 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
             _loadFailed = true;
             ShowErrorFor(null);
             if (section == _selected) RenderSelectedSafely();
-            return;
+            return false;
         }
         _loadFailed = false;
         _loadedAt[section] = DateTimeOffset.Now;
         if (section is "Projects" or "Reservations") _loadedAt[section == "Projects" ? "Reservations" : "Projects"] = _loadedAt[section];
-        _status.IsOpen = false;
+        // A member write's result stays visible until dismissed; a successful reload only clears earlier load errors.
+        if (!_memberNoticeShown) _status.IsOpen = false;
         if (section == "Maintenance") _maintenanceUnavailable = false;
         if (section == _selected) RenderSelectedSafely();
+        return true;
     }
 
     private bool StorePaged(string section, AdminPage<AdminRequest>? page, bool append)
@@ -268,7 +278,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
     private void ShowError(string title, string message)
     {
         _status.Severity = title == "Admin_ErrorTitle" ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
-        _status.Title = L(title); _status.Message = L(message); _status.ActionButton = null;
+        _status.Title = L(title); _status.Message = L(message); _status.ActionButton = null; _memberNoticeShown = false;
         if (title == "Admin_ErrorTitle")
         {
             var retry = new Button { Content = L("Retry") }; retry.Click += (_, _) => _ = LoadSectionAsync(_selected, false); _status.ActionButton = retry;

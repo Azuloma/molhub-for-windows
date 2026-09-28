@@ -21,6 +21,7 @@
     <Compile Include="..\..\Pages\Maintenance\MaintenanceModel.cs" Link="MaintenanceModel.cs" />
     <Compile Include="..\..\Pages\Management\ManagementModel.cs" Link="ManagementModel.cs" />
     <Compile Include="..\..\Pages\Administration\AdministrationModel.cs" Link="AdministrationModel.cs" />
+    <Compile Include="..\..\Pages\Administration\AdminUserWriteModel.cs" Link="AdminUserWriteModel.cs" />
     <Compile Include="..\..\Pages\Management\ManageWriteModel.cs" Link="ManageWriteModel.cs" />
     <Compile Include="..\..\Pages\Projects\WorkModel.cs" Link="WorkModel.cs" />
     <Compile Include="..\..\Pages\Approval\ApprovalModel.cs" Link="ApprovalModel.cs" />

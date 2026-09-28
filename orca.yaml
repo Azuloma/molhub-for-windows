@@ -1,6 +1,0 @@
-# Orca ADE repository settings (read by Orca from the main checkout when it creates a worktree).
-# .claude_stuff/ (work plan, design contract, history) is not in Git; each new worktree gets a
-# link to the main checkout's copy. Remove worktrees only through Orca, never by deleting the folder.
-worktree:
-  sharedDirectories:
-    - .claude_stuff
