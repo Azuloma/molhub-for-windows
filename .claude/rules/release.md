@@ -7,8 +7,7 @@ paths:
   - "README.md"
 ---
 
-# Versioning and release records (moved from CLAUDE.md)
-
+# Versioning and release records
 - `<Version>` in `FusionLedger.Windows.csproj` is the display-version source of truth; `Package.appxmanifest` carries the four-part `X.Y.Z.0`. Do not add another version constant.
 - A release updates the csproj, manifest, `VERSION.md`, `CHANGELOG.md` and `README.md`, and the version assertions in the policy tests.
 - Bump size: patch by default, also for a single-page feature (user decision 2026-09-27); ask before a minor bump. Bump the patch version whenever an in-place upgrade is needed; a same-version reinstall requires uninstalling, which deletes the sign-in profile.

@@ -9,9 +9,9 @@ paths:
   - "Pages/**"
 ---
 
-# App code — common rules (moved from CLAUDE.md)
+# App code — common rules
 
-- Source is grouped in folders; the namespace stays `FusionLedger.Windows` everywhere (folders are not namespaces). A new data page gets its own `Pages/<Name>/` folder (`*View`, `*Model`). Moving a file means updating the `Compile Include` links in the test csproj and the `Path.Combine(sourceRoot, ...)` reads in the policy tests.
+- Source is grouped in folders; the namespace stays `FusionLedger.Windows` everywhere (folders are not namespaces). A new data page gets its own `Pages/<Name>/` folder (`*View`, `*Model`), a `.claude/rules/pages-<name>.md` file and a row in the `CLAUDE.md` repository map. Moving a file: see `.claude/rules/tests.md`.
 - UI: WinUI ThemeResources, Mica with fallback, Segoe typography and Segoe Fluent glyphs; support Light/Dark/High Contrast, keyboard access, localized automation names, English default plus Japanese. All user-facing strings go through `L(key)` and exist in both `.resw` files.
 - Code-built pages must not read brushes from `Application.Current.Resources` directly (the theme is set on `RootGrid`, not the app); put `{ThemeResource}` setters in `App.xaml` styles and apply the style. Show avatars with `AvatarImage.Attach`. Keep `ContentFrame` stretched.
 
