@@ -84,6 +84,10 @@ This package is unsigned and meant for development only. Windows SmartScreen may
 - Sign out revokes the server session through the bridge when it is connected, then clears the WebView2 cookies and site data. If the bridge is unavailable, only the local data is cleared and the server session expires on its own.
 - Administration, Commit history and Server maintenance are read-only (admin changes stay on the web); Projects has the work reservation and publish writes only; Project management has the web's management writes (Discord server/channel discovery and App setup stay on the web); Profile settings has icon change/removal and password change. There are no notifications, tray icon or background activity.
 
+## Development
+
+This application is vibe-coded using Claude Opus 5.5 and OpenAI GPT-5.6 Sol and Luna. Hands-on application testing is performed by me, the project owner.
+
 ## Versioning
 
 The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.5.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
