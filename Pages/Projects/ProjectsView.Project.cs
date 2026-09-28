@@ -68,15 +68,15 @@ internal sealed partial class ProjectsView
         title.Children.Add(heading);
         title.Children.Add(_p.PrivateBadge());
         header.Children.Add(title);
-        var refresh = _p.SubtleButton(L("Projects_Refresh"), "", () => _ = LoadProjectAsync(screen));
+        var refresh = _p.SubtleButton(L("Projects_Refresh"), "\uE72C", () => _ = LoadProjectAsync(screen));
         Grid.SetColumn(refresh, 1);
         header.Children.Add(refresh);
         root.Children.Add(header);
         if (project.Description.Length > 0) root.Children.Add(_p.Secondary(project.Description));
 
         var tabs = new SelectorBar();
-        var overviewTab = new SelectorBarItem { Text = L("Projects_Overview"), Icon = new FontIcon { Glyph = "" }, IsSelected = true };
-        var commitsTab = new SelectorBarItem { Text = L("Projects_Commits"), Icon = new FontIcon { Glyph = "" } };
+        var overviewTab = new SelectorBarItem { Text = L("Projects_Overview"), Icon = new FontIcon { Glyph = "\uE8A9" }, IsSelected = true };
+        var commitsTab = new SelectorBarItem { Text = L("Projects_Commits"), Icon = new FontIcon { Glyph = "\uE81C" } };
         tabs.Items.Add(overviewTab);
         tabs.Items.Add(commitsTab);
         root.Children.Add(tabs);
@@ -119,7 +119,7 @@ internal sealed partial class ProjectsView
         work.Children.Add(WorkActions(screen, project));
         work.Spacing = 10;
         work.Padding = new Thickness(16, 12, 16, 14);
-        side.Children.Add(_p.Card("Projects_WorkReservation", "", work));
+        side.Children.Add(_p.Card("Projects_WorkReservation", "\uE823", work));
         side.Children.Add(AboutCard(project, head));
         side.Children.Add(TeamCard(detail.Members));
 
@@ -162,7 +162,7 @@ internal sealed partial class ProjectsView
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(PageParts.Glyph("", 14));
+            row.Children.Add(PageParts.Glyph("\uE8A5", 14));
             var label = ProjectsModel.VersionLabel(commit.Version, commit.Id);
             var link = CommitLink(commit.Id, label, $"{label}: {commit.Title}");
             Grid.SetColumn(link, 1);
@@ -203,11 +203,11 @@ internal sealed partial class ProjectsView
 
             var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 4, 0, 0) };
             if (head?.ShareUri is { } uri) actions.Children.Add(OpenMfaButton(uri));
-            actions.Children.Add(_p.SubtleButton(L("Projects_Details"), "", () => PushCommit(commitId, label)));
+            actions.Children.Add(_p.SubtleButton(L("Projects_Details"), "\uE76C", () => PushCommit(commitId, label)));
             body.Children.Add(actions);
         }
         body.Children.Add(_p.StorageNote());
-        return _p.Card("Projects_ProjectOverview", "", body);
+        return _p.Card("Projects_ProjectOverview", "\uE8A5", body);
     }
 
     private Border AboutCard(ProjectSummary project, ProjectCommit? head)
@@ -216,7 +216,7 @@ internal sealed partial class ProjectsView
         body.Children.Add(_p.Secondary(project.Description.Length > 0 ? project.Description : L("Projects_NoDescription")));
         AddInfoRow(body, "Projects_ProjectType", new TextBlock { Text = "Clickteam Fusion", TextWrapping = TextWrapping.Wrap });
         var visibility = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-        visibility.Children.Add(PageParts.Glyph("", 12));
+        visibility.Children.Add(PageParts.Glyph("\uE72E", 12));
         visibility.Children.Add(new TextBlock { Text = L("Projects_Private") });
         AddInfoRow(body, "Projects_Visibility", visibility);
         var created = DashboardModel.FormatDate(project.CreatedAt, _language);
@@ -224,7 +224,7 @@ internal sealed partial class ProjectsView
         var updated = DashboardModel.FormatDate(head?.CreatedAt ?? project.Latest?.CreatedAt, _language);
         AddInfoRow(body, "Projects_LastUpdated", new TextBlock { Text = updated.Length > 0 ? updated : "—" });
         AddInfoRow(body, "Projects_ProjectId", _p.IdChip(project.Id, L("Projects_CopyProjectIdFormat"), "Projects_Copied"));
-        return _p.Card("Projects_About", "", body);
+        return _p.Card("Projects_About", "\uE946", body);
     }
 
     private void AddInfoRow(StackPanel body, string labelKey, FrameworkElement value)
@@ -260,7 +260,7 @@ internal sealed partial class ProjectsView
             AutomationProperties.SetName(row, $"{member.Username}, {role}");
             list.Children.Add(row);
         }
-        return _p.Card("Projects_TeamAccess", "", list);
+        return _p.Card("Projects_TeamAccess", "\uE716", list);
     }
 
     // ----- Commit timeline (project Commits tab and the personal history) -----
@@ -408,7 +408,7 @@ internal sealed partial class ProjectsView
             {
                 var section = new StackPanel { Spacing = 8 };
                 var dayHeader = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-                dayHeader.Children.Add(PageParts.Glyph("", 14));
+                dayHeader.Children.Add(PageParts.Glyph("\uE81C", 14));
                 var dayText = ProjectsModel.FormatDay(day, _language);
                 dayHeader.Children.Add(PageParts.Heading(dayText.Length > 0 ? dayText : L("Projects_NotRecorded"), AutomationHeadingLevel.Level2));
                 dayHeader.Children.Add(Centered(PageParts.Caption(CommitCount(group.Count))));
@@ -485,7 +485,7 @@ internal sealed partial class ProjectsView
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
         actions.Children.Add(_p.IdChip(commit.Id, L("Dashboard_CopyIdFormat"), "Dashboard_Copied"));
         if (commit.ShareUri is { } uri) actions.Children.Add(OpenMfaLink(uri));
-        actions.Children.Add(_p.LinkButton(L("Projects_Details"), () => PushCommit(commit.Id, ProjectsModel.VersionLabel(commit.Version, commit.Id)), new Thickness(0), ""));
+        actions.Children.Add(_p.LinkButton(L("Projects_Details"), () => PushCommit(commit.Id, ProjectsModel.VersionLabel(commit.Version, commit.Id)), new Thickness(0), "\uE76C"));
         content.Children.Add(actions);
         Grid.SetColumn(content, 1);
         row.Children.Add(content);
@@ -548,7 +548,7 @@ internal sealed partial class ProjectsView
             actions.Children.Add(OpenMfaButton(uri));
             changes.Children.Add(actions);
         }
-        main.Children.Add(_p.Card("Projects_Changes", "", changes));
+        main.Children.Add(_p.Card("Projects_Changes", "\uE8A5", changes));
         main.Children.Add(_p.StorageNote());
 
         var info = new StackPanel { Spacing = 10, Padding = new Thickness(16, 12, 16, 14) };
@@ -560,7 +560,7 @@ internal sealed partial class ProjectsView
         AddInfoRow(info, "Projects_BasedOn", basedOn);
         AddInfoRow(info, "Projects_SharedBy", new TextBlock { Text = commit.AuthorName.Length > 0 ? commit.AuthorName : "—", TextTrimming = TextTrimming.CharacterEllipsis });
         var side = new StackPanel { Spacing = 16 };
-        side.Children.Add(_p.Card("Projects_CommitInfo", "", info));
+        side.Children.Add(_p.Card("Projects_CommitInfo", "\uE946", info));
 
         var layout = new TwoColumnLayout(main, side, 300, sideOnLeft: false, sideFirstWhenStacked: false);
         root.Children.Add(layout.Element);
@@ -591,7 +591,7 @@ internal sealed partial class ProjectsView
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         content.Children.Add(new TextBlock { Text = L("Projects_OpenMfa") });
-        content.Children.Add(new FontIcon { Glyph = "", FontSize = 14, FontFamily = PageParts.SymbolFont });
+        content.Children.Add(new FontIcon { Glyph = "\uE8A7", FontSize = 14, FontFamily = PageParts.SymbolFont });
         var button = new Button { Content = content, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
         DescribeExternal(button, uri);
         button.Click += async (_, _) => await OpenShareAsync(uri);
@@ -600,7 +600,7 @@ internal sealed partial class ProjectsView
 
     private HyperlinkButton OpenMfaLink(Uri uri)
     {
-        var link = _p.LinkButton(L("Projects_OpenMfa"), () => _ = OpenShareAsync(uri), new Thickness(0), "");
+        var link = _p.LinkButton(L("Projects_OpenMfa"), () => _ = OpenShareAsync(uri), new Thickness(0), "\uE8A7");
         DescribeExternal(link, uri);
         return link;
     }

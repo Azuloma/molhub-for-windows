@@ -204,7 +204,7 @@ internal sealed class DashboardView : UserControl
             AddStatusRow(rows, "Dashboard_PendingApprovals", data.PendingApprovals);
         }
         rows.Padding = new Thickness(16, 4, 16, 8);
-        return Card("Dashboard_WorkspaceStatus", "", rows);
+        return Card("Dashboard_WorkspaceStatus", "\uE823", rows);
     }
 
     private void AddStatusRow(StackPanel rows, string labelKey, int value, bool first = false)
@@ -232,7 +232,7 @@ internal sealed class DashboardView : UserControl
             var row = new Grid { ColumnSpacing = 10, Padding = new Thickness(0, 6, 0, 6) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.Children.Add(Glyph("", 14));
+            row.Children.Add(Glyph("\uE8B7", 14));
             var name = new TextBlock { Text = project.Name, Style = Res("BodyStrongTextBlockStyle"), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
             ToolTipService.SetToolTip(name, project.Name);
             Grid.SetColumn(name, 1);
@@ -240,7 +240,7 @@ internal sealed class DashboardView : UserControl
             list.Children.Add(ProjectButton(row, project));
         }
         list.Children.Add(LinkButton("Dashboard_ViewAllProjects", () => _navigate(NativePage.Projects), new Thickness(-8, 4, 0, 0)));
-        return Card("Dashboard_TopProjects", "", list);
+        return Card("Dashboard_TopProjects", "\uE8B7", list);
     }
 
     private Border ActivityCard(DashboardData data)
@@ -253,7 +253,7 @@ internal sealed class DashboardView : UserControl
             var row = new Grid { ColumnSpacing = 10 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var icon = Glyph("", 14);
+            var icon = Glyph("\uE823", 14);
             icon.VerticalAlignment = VerticalAlignment.Top;
             icon.Margin = new Thickness(0, 3, 0, 0);
             row.Children.Add(icon);
@@ -267,7 +267,7 @@ internal sealed class DashboardView : UserControl
             row.Children.Add(text);
             list.Children.Add(row);
         }
-        return Card("Dashboard_Activity", "", list);
+        return Card("Dashboard_Activity", "\uE823", list);
     }
 
     private Border StorageNote()
@@ -275,7 +275,7 @@ internal sealed class DashboardView : UserControl
         var row = new Grid { ColumnSpacing = 10, Padding = new Thickness(16, 12, 16, 12) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var icon = Glyph("", 14);
+        var icon = Glyph("\uE946", 14);
         icon.VerticalAlignment = VerticalAlignment.Top;
         icon.Margin = new Thickness(0, 2, 0, 0);
         row.Children.Add(icon);
@@ -310,7 +310,7 @@ internal sealed class DashboardView : UserControl
             row.Children.Add(publish);
             list.Children.Add(row);
         }
-        return Card("Dashboard_YourWork", "", list);
+        return Card("Dashboard_YourWork", "\uE823", list);
     }
 
     /// <summary>Wraps a project row in a subtle full-width button that opens the native project overview.</summary>
@@ -337,7 +337,7 @@ internal sealed class DashboardView : UserControl
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.Children.Add(Glyph("", 16));
+        header.Children.Add(Glyph("\uE81C", 16));
         var title = new TextBlock { Text = _l("Dashboard_RecentCommits"), Style = Res("BodyStrongTextBlockStyle"), VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetHeadingLevel(title, AutomationHeadingLevel.Level2);
         Grid.SetColumn(title, 1);
@@ -348,7 +348,7 @@ internal sealed class DashboardView : UserControl
         header.Children.Add(history);
 
         var refreshContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        refreshContent.Children.Add(new FontIcon { Glyph = "", FontSize = 14, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] });
+        refreshContent.Children.Add(new FontIcon { Glyph = "\uE72C", FontSize = 14, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] });
         refreshContent.Children.Add(new TextBlock { Text = _l("Dashboard_Refresh") });
         _refreshButton = new Button { Content = refreshContent, Style = Res("SubtleButtonStyle") };
         AutomationProperties.SetName(_refreshButton, _l("Dashboard_Refresh"));
@@ -419,7 +419,7 @@ internal sealed class DashboardView : UserControl
         var shortId = DashboardModel.ShortId(id);
         var chip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
         chip.Children.Add(new TextBlock { Text = shortId, Style = Res("DashboardIdTextStyle") });
-        var icon = new FontIcon { Glyph = "", FontSize = 12, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] };
+        var icon = new FontIcon { Glyph = "\uE8C8", FontSize = 12, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] };
         var copy = new Button { Content = icon, Style = Res("SubtleButtonStyle"), Padding = new Thickness(6, 4, 6, 4), MinWidth = 0, MinHeight = 0 };
         var copyName = string.Format(_l("Dashboard_CopyIdFormat"), shortId);
         AutomationProperties.SetName(copy, copyName);
@@ -429,14 +429,14 @@ internal sealed class DashboardView : UserControl
             var package = new DataPackage();
             package.SetText(id);
             Clipboard.SetContent(package);
-            icon.Glyph = "";
+            icon.Glyph = "\uE73E";
             ToolTipService.SetToolTip(copy, _l("Dashboard_Copied"));
             if (FrameworkElementAutomationPeer.FromElement(copy) is { } peer)
             {
                 peer.RaiseNotificationEvent(AutomationNotificationKind.ActionCompleted, AutomationNotificationProcessing.ImportantMostRecent, _l("Dashboard_Copied"), "DashboardCopy");
             }
             await Task.Delay(1500);
-            icon.Glyph = "";
+            icon.Glyph = "\uE8C8";
             ToolTipService.SetToolTip(copy, copyName);
         };
         chip.Children.Add(copy);
@@ -465,7 +465,7 @@ internal sealed class DashboardView : UserControl
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         content.Children.Add(new TextBlock { Text = _l(key) });
-        content.Children.Add(new FontIcon { Glyph = "", FontSize = 12, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] });
+        content.Children.Add(new FontIcon { Glyph = "\uE72A", FontSize = 12, FontFamily = (Microsoft.UI.Xaml.Media.FontFamily)Application.Current.Resources["SymbolThemeFontFamily"] });
         var button = new HyperlinkButton { Content = content, Margin = margin, VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetName(button, _l(key));
         button.Click += (_, _) => action();

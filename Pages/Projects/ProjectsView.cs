@@ -335,7 +335,7 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         header.Children.Add(PageParts.Heading(L("Page_Projects"), AutomationHeadingLevel.Level1, "TitleTextBlockStyle"));
-        var refresh = _p.SubtleButton(L("Projects_Refresh"), "", () => _ = LoadListAsync(append: false));
+        var refresh = _p.SubtleButton(L("Projects_Refresh"), "\uE72C", () => _ = LoadListAsync(append: false));
         Grid.SetColumn(refresh, 1);
         header.Children.Add(refresh);
         main.Children.Add(header);
@@ -438,7 +438,7 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
 
         var open = new Button { VerticalAlignment = VerticalAlignment.Center };
         var openContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        openContent.Children.Add(new FontIcon { Glyph = "", FontSize = 14, FontFamily = PageParts.SymbolFont });
+        openContent.Children.Add(new FontIcon { Glyph = "\uE72A", FontSize = 14, FontFamily = PageParts.SymbolFont });
         openContent.Children.Add(new TextBlock { Text = L("Projects_OpenProject") });
         open.Content = openContent;
         AutomationProperties.SetName(open, $"{L("Projects_OpenProject")}: {project.Name}");

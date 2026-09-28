@@ -74,7 +74,7 @@ internal sealed class PageParts(Func<string, string> localize)
         return new Border { Style = Res("DashboardCardStyle"), Child = panel };
     }
 
-    public HyperlinkButton LinkButton(string text, Action action, Thickness margin, string? glyph = "")
+    public HyperlinkButton LinkButton(string text, Action action, Thickness margin, string? glyph = "\uE72A")
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
         content.Children.Add(new TextBlock { Text = text });
@@ -120,7 +120,7 @@ internal sealed class PageParts(Func<string, string> localize)
         var row = new Grid { ColumnSpacing = 10, Padding = new Thickness(16, 12, 16, 12) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var icon = Glyph("", 14);
+        var icon = Glyph("\uE946", 14);
         icon.VerticalAlignment = VerticalAlignment.Top;
         icon.Margin = new Thickness(0, 2, 0, 0);
         row.Children.Add(icon);
@@ -136,7 +136,7 @@ internal sealed class PageParts(Func<string, string> localize)
         var shortId = DashboardModel.ShortId(id);
         var chip = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
         chip.Children.Add(new TextBlock { Text = shortId, Style = Res("DashboardIdTextStyle") });
-        var icon = new FontIcon { Glyph = "", FontSize = 12, FontFamily = SymbolFont };
+        var icon = new FontIcon { Glyph = "\uE8C8", FontSize = 12, FontFamily = SymbolFont };
         var copy = new Button { Content = icon, Style = (Style)Application.Current.Resources["SubtleButtonStyle"], Padding = new Thickness(6, 4, 6, 4), MinWidth = 0, MinHeight = 0 };
         var copyName = string.Format(copyNameFormat, shortId);
         AutomationProperties.SetName(copy, copyName);
@@ -146,14 +146,14 @@ internal sealed class PageParts(Func<string, string> localize)
             var package = new DataPackage();
             package.SetText(id);
             Clipboard.SetContent(package);
-            icon.Glyph = "";
+            icon.Glyph = "\uE73E";
             ToolTipService.SetToolTip(copy, L(copiedKey));
             if (FrameworkElementAutomationPeer.FromElement(copy) is { } peer)
             {
                 peer.RaiseNotificationEvent(AutomationNotificationKind.ActionCompleted, AutomationNotificationProcessing.ImportantMostRecent, L(copiedKey), "PageCopy");
             }
             await Task.Delay(1500);
-            icon.Glyph = "";
+            icon.Glyph = "\uE8C8";
             ToolTipService.SetToolTip(copy, copyName);
         };
         chip.Children.Add(copy);
