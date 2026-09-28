@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.7
+
+- Administration → Members can now change member accounts, as on the web admin panel: Approve, Reject and Suspend, and Issue reset code. The actions offered follow the account's status (awaiting approval: Approve, Reject, Suspend, Issue reset code; approved: Issue reset code, Suspend; rejected: Approve, Suspend; suspended: Approve). Administrator accounts, including your own, have no actions.
+- Every action is confirmed first (Cancel is the default; Reject and Suspend warn that normal access is removed), sent once, and followed by a Members refresh. If the result can't be confirmed, the page says so and nothing is sent again.
+- A reset code is shown once in its own dialog with its expiry and a Copy button; it replaces any earlier code, is never kept or logged, and can't be displayed again after the dialog closes.
+- The other Administration sections remain read-only. No Web API or bridge contract changed (`setUserStatus`, `issueResetCode`).
+
 ## v0.14.6
 
 - Fixed Administration Members staying on the loading indicator and crashing when reopened after switching sections. Some member statuses referenced a missing XAML style; the page now uses the defined style. Read and rendering failures also settle into the existing localized error state.

@@ -1,6 +1,6 @@
 ![image 01](<https://github.com/Azuloma/molhub-for-windows/blob/main/Assets/for%20Github/image01.png>)
 
-A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.14.6** (beta prototype).
+A native-first Windows client for MolHub (formerly Fusion Ledger), built with WinUI 3. Current version: **v0.14.7** (beta prototype).
 
 The app opens a sign-in window that hosts the existing MolHub web login in WebView2. Once the production `/api/me` response confirms the signed-in user, the sign-in window closes and a native main window opens. The main window is a WinUI shell, not a wrapper around the web application.
 
@@ -20,7 +20,7 @@ The app opens a sign-in window that hosts the existing MolHub web login in WebVi
 | Approval waiting   | Working. An account that is not approved yet sees the web's approval-waiting screen instead of the workspace (plus Server maintenance, App settings and Version info). Refresh checks the server session and opens the workspace once the account is approved, without signing in again.                                                                                                                                                                                                                                                                                                                  |
 | Server maintenance | Working, read-only, for every signed-in account. The current maintenance state and the announcements published after each maintenance, with paging and details. Starting or completing maintenance stays on the web.                                                                                                                                                                                                                                                                                                                                                                                      |
 | Profile settings   | Working. Choose or remove your icon (any supported image is converted to a PNG of up to 128 × 128 pixels and 32 KB, with a preview before saving) and change your password (signs out every device, including this one, once confirmed).                                                                                                                                                                                                                                                                                                                                                                 |
-| Administration     | Read-only. Appears only for approved admins (account menu). Requests, Projects, Members, Reservations, Discord status, Maintenance history and Audit, as on the web admin panel; changes stay on the web for now.                                                                                                                                                                                                                                                                                                                                                                                         |
+| Administration     | Appears only for approved admins (account menu). Requests, Projects, Members, Reservations, Discord status, Maintenance history and Audit, as on the web admin panel. Members can approve, reject or suspend member accounts and issue a one-time reset code (confirmed, sent once); the other sections are read-only and their changes stay on the web.                                                                                                                                                                                                                                                  |
 | Notifications      | Not connected. The bell flyout says so; no notifications are generated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 Placeholder pages show a heading and a "not connected" message only. They never show sample counts, records or controls that do nothing.
@@ -50,8 +50,8 @@ dotnet build FusionLedger.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
 Use Windows PowerShell 5.1 or later. First enable **Settings > System > For developers > Developer Mode**. Then check and install the package you built:
 
 ```powershell
-.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.6.0_x64_Debug_Test"
-.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.6.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.7.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\FusionLedger.Windows_0.14.7.0_x64_Debug_Test"
 ```
 
 - `-WhatIf` only checks that the package and its x64 dependency packages are present; nothing is installed.
@@ -82,7 +82,7 @@ This package is unsigned and meant for development only. Windows SmartScreen may
 ## Known limitations
 
 - Sign out revokes the server session through the bridge when it is connected, then clears the WebView2 cookies and site data. If the bridge is unavailable, only the local data is cleared and the server session expires on its own.
-- Administration, Commit history and Server maintenance are read-only (admin changes stay on the web); Projects has the work reservation and publish writes only; Project management has the web's management writes (Discord server/channel discovery and App setup stay on the web); Profile settings has icon change/removal and password change. There are no notifications, tray icon or background activity.
+- Commit history and Server maintenance are read-only; Administration has only the Members account writes (approve / reject / suspend, reset code) and its other changes stay on the web; Projects has the work reservation and publish writes only; Project management has the web's management writes (Discord server/channel discovery and App setup stay on the web); Profile settings has icon change/removal and password change. There are no notifications, tray icon or background activity.
 
 ## Development
 
@@ -90,7 +90,7 @@ This application is vibe-coded using Claude Opus 5.5 and OpenAI GPT-5.6 Sol and 
 
 ## Versioning
 
-The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.6.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
+The `<Version>` element in `FusionLedger.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.7.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## License
 
