@@ -8,5 +8,5 @@ artifacts/
 *.pfx
 .vs/
 BundleArtifacts/
-.claude/rules
+/.claude/rules/
 /CLAUDE.md
