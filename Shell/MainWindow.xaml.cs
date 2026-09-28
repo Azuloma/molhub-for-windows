@@ -114,19 +114,35 @@ public sealed partial class MainWindow : Window
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         _themeService.Dispose();
+        _bridge.StateChanged -= Bridge_StateChanged;
         _bridge.Dispose();
     }
 
-    /// <summary>Connects the hidden data bridge and confirms the server session behind it.</summary>
-    private async Task ConnectBridgeAsync()
+    /// <summary>
+    /// Keeps the bridge status row in step with the connection: a failure shows its diagnostic, and every (re)connection
+    /// confirms the server session behind it. A failed bridge reconnects on the next request (for example Retry).
+    /// </summary>
+    private void Bridge_StateChanged(object? sender, EventArgs e)
     {
-        if (!await _bridge.StartAsync())
+        switch (_bridge.State)
         {
-            SetBridgeStatus("BridgeUnavailable", _bridge.LastError);
-            return;
+            case BridgeConnectionState.Connecting:
+                SetBridgeStatus("BridgeConnecting");
+                break;
+            case BridgeConnectionState.Unavailable:
+                SetBridgeStatus("BridgeUnavailable", _bridge.LastError);
+                break;
+            case BridgeConnectionState.Connected:
+                _ = CheckBridgeSessionAsync();
+                break;
         }
+    }
 
+    /// <summary>Confirms the server session behind a newly connected bridge.</summary>
+    private async Task CheckBridgeSessionAsync()
+    {
         var session = await _bridge.RequestAsync("session");
+        if (_bridge.State != BridgeConnectionState.Connected) return;
         if (!session.Ok || session.Data is not { } data)
         {
             SetBridgeStatus("BridgeUnavailable", $"session {session.Status} {session.ErrorCode}");
@@ -191,7 +207,8 @@ public sealed partial class MainWindow : Window
         // Let NavigationView finish its initial selection/layout before showing the first page.
         _initialNavigationCompleted = true;
         NavigateTo(NativePageCatalog.StartPage(_user), false);
-        _ = ConnectBridgeAsync();
+        _bridge.StateChanged += Bridge_StateChanged;
+        _ = _bridge.StartAsync();
     }
 
     private void RootGrid_SizeChanged(object sender, SizeChangedEventArgs e)

@@ -1,6 +1,6 @@
 ![image 01](<https://github.com/Azuloma/molhub-for-windows/blob/main/Assets/for%20Github/image01.png>)
 
-A native-first Windows client for MolHub, built with WinUI 3. Current version: **v0.14.11** (beta prototype).
+A native-first Windows client for MolHub, built with WinUI 3. Current version: **v0.14.12** (beta prototype).
 
 The app opens a sign-in window that hosts the existing MolHub web login in WebView2. Once the production `/api/me` response confirms the signed-in user, the sign-in window closes and a native main window opens. The main window is a WinUI shell, not a wrapper around the web application.
 
@@ -50,8 +50,8 @@ dotnet build MolHub.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
 Use Windows PowerShell 5.1 or later. First enable **Settings > System > For developers > Developer Mode**. Then check and install the package you built:
 
 ```powershell
-.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\MolHub.Windows_0.14.11.0_x64_Debug_Test"
-.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\MolHub.Windows_0.14.11.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\MolHub.Windows_0.14.12.0_x64_Debug_Test"
+.\Install-Prototype.ps1 -PackageDirectory ".\AppPackages\MolHub.Windows_0.14.12.0_x64_Debug_Test"
 ```
 
 - `-WhatIf` only checks that the package and its x64 dependency packages are present; nothing is installed.
@@ -66,7 +66,7 @@ This package is unsigned and meant for development only. Windows SmartScreen may
 - **Packaging:** packaged WinUI 3 desktop app for x64, using Microsoft.WindowsAppSDK 2.5.1 and Microsoft.Web.WebView2.
 - **Sign-in window:** a compact, fixed-size dialog with a 481 × 683 DIP client area (32 DIP title bar with only a close button). It scales with the monitor's DPI, stays inside the work area and opens centered; a progress ring covers the web view until the first page load.
 - **Windows:** `LoginWindow` hosts the only visible WebView2. `MainWindow` is fully native (no WebView2 in its XAML) and changes pages by replacing the content of `ContentFrame`.
-- **Data bridge:** `WebBridgeClient` runs a hidden WebView2 controller in its own invisible window. It loads only `https://fusion-ledger.desase0175.workers.dev/webview-bridge` (the canonical path of the web app's bridge page) and exchanges `{ command, requestId, payload }` messages with it; the page calls `/api/v1` with the session cookie. Both WebViews share one environment (`WebViewProfile`), so the engine shares the HttpOnly cookie without the app reading it. Writes that time out or lose the bridge are reported as "outcome unknown" and never resent automatically.
+- **Data bridge:** `WebBridgeClient` runs a hidden WebView2 controller in its own invisible window. It loads only `https://fusion-ledger.desase0175.workers.dev/webview-bridge` (the canonical path of the web app's bridge page) and exchanges `{ command, requestId, payload }` messages with it; the page calls `/api/v1` with the session cookie. Both WebViews share one environment (`WebViewProfile`), so the engine shares the HttpOnly cookie without the app reading it. Writes that time out or lose the bridge are reported as "outcome unknown" and never resent automatically. If the bridge fails, the next request (for example a page's Retry) closes the failed controller and connects again, and the version info shows the current connection state.
 - **Sign-in data:** the WebView2 profile is stored at `ApplicationData.Current.LocalFolder\MolHub.WebView2`. For an installed package this is normally `%LOCALAPPDATA%\Packages\MolHub.Windows_*\LocalState\MolHub.WebView2`.
 - **User details:** the app reads only an exact HTTPS `GET /api/me` response. It accepts bounded JSON with a username, a known status (`pending`, `approved`, `rejected`, `suspended`) and role (`member`, `admin`), plus an optional small PNG avatar.
 - **Settings:** only the `ui.language` and `ui.theme` keys are stored in `LocalSettings`. Invalid values fall back to English and System. Theme changes apply at once; a language change applies after restarting the app.
@@ -90,7 +90,7 @@ This application is vibe-coded using Claude Opus 5.5 and OpenAI GPT-5.6 Sol and 
 
 ## Versioning
 
-The `<Version>` element in `MolHub.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.11.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
+The `<Version>` element in `MolHub.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.14.12.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## License
 

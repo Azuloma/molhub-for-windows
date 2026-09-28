@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.12
+
+- Fixed the data bridge staying unavailable until the app was restarted after one failure (for example right after sign-in or when the browser process stopped). The next request, such as a page's Retry, now connects the bridge again.
+- The bridge line in the version info now follows the connection: it shows connecting, unavailable (with the reason) or the confirmed session again after a reconnection.
+- No Web API or bridge contract changed.
+
 ## v0.14.11
 
 - Every internal name now uses MolHub: package identity `MolHub.Windows` (publisher `CN=MolHub`), namespace, project files, test project, theme resource keys and the WebView2 profile folder (`MolHub.WebView2`). Only the production host name of the web app keeps its original spelling.

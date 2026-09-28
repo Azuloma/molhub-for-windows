@@ -35,12 +35,17 @@ internal sealed class WebBridgeClient : IDisposable
 
     public event EventHandler? StateChanged;
 
-    /// <summary>Starts the bridge once; the task completes with true when the bridge page is loaded and listening.</summary>
+    /// <summary>
+    /// Starts the bridge; the task completes with true when the bridge page is loaded and listening. A start in progress
+    /// or a live connection is shared by every caller; after a failure the next call closes the failed controller and
+    /// connects again, so a later request (for example a page's Retry) reconnects without restarting the app.
+    /// </summary>
     public Task<bool> StartAsync()
     {
         if (_disposed) return Task.FromResult(false);
-        if (_ready is null)
+        if (_ready is null || State == BridgeConnectionState.Unavailable)
         {
+            CloseController();
             _ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _ = StartCoreAsync();
         }
@@ -53,8 +58,9 @@ internal sealed class WebBridgeClient : IDisposable
         var stage = "window";
         try
         {
-            _hostWindow = CreateWindowExW(0, "Static", "MolHub data bridge", WS_POPUP, 0, 0, 0, 0,
-                IntPtr.Zero, IntPtr.Zero, GetModuleHandleW(null), IntPtr.Zero);
+            if (_hostWindow == IntPtr.Zero)
+                _hostWindow = CreateWindowExW(0, "Static", "MolHub data bridge", WS_POPUP, 0, 0, 0, 0,
+                    IntPtr.Zero, IntPtr.Zero, GetModuleHandleW(null), IntPtr.Zero);
             if (_hostWindow == IntPtr.Zero) throw new InvalidOperationException("Bridge host window unavailable.");
 
             // Right after sign-in the sign-in WebView may still be shutting down the shared browser process,
@@ -221,6 +227,14 @@ internal sealed class WebBridgeClient : IDisposable
         _ready?.TrySetResult(false);
         SetState(BridgeConnectionState.Closed);
         _disposed = true;
+        CloseController();
+        if (_hostWindow != IntPtr.Zero) DestroyWindow(_hostWindow);
+        _hostWindow = IntPtr.Zero;
+    }
+
+    /// <summary>Detaches and closes the current controller; the host window stays for the next connection.</summary>
+    private void CloseController()
+    {
         if (_core is { } core)
         {
             core.NavigationStarting -= Core_NavigationStarting;
@@ -235,8 +249,6 @@ internal sealed class WebBridgeClient : IDisposable
         _core = null;
         try { _controller?.Close(); } catch { /* The browser process may already be gone. */ }
         _controller = null;
-        if (_hostWindow != IntPtr.Zero) DestroyWindow(_hostWindow);
-        _hostWindow = IntPtr.Zero;
     }
 
     private static Uri? TryParseUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;

@@ -185,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.11</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.11.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.11.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.11.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.12</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.12.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.12.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.12.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.11", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.11", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.11", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.10", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.11 above v0.14.10 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.12", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.12", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.12", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.11", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.12 above v0.14.11 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -320,6 +320,12 @@ Assert(bridgeCode.Contains("settings.IsWebMessageEnabled = true", StringComparis
 Assert(!bridgeCode.Contains("ExecuteScriptAsync", StringComparison.Ordinal) && !bridgeCode.Contains("AddScriptToExecuteOnDocumentCreated", StringComparison.Ordinal)
     && !bridgeCode.Contains("AddHostObjectToScript", StringComparison.Ordinal) && !bridgeCode.Contains("CookieManager", StringComparison.Ordinal)
     && !bridgeCode.Contains("GetCookies", StringComparison.Ordinal), "The bridge host must not inject script, expose host objects or touch cookies.");
+var bridgeStart = bridgeCode[bridgeCode.IndexOf("public Task<bool> StartAsync()", StringComparison.Ordinal)..bridgeCode.IndexOf("private async Task StartCoreAsync()", StringComparison.Ordinal)];
+Assert(bridgeStart.Contains("State == BridgeConnectionState.Unavailable", StringComparison.Ordinal)
+    && bridgeStart.IndexOf("CloseController();", StringComparison.Ordinal) >= 0
+    && bridgeStart.IndexOf("CloseController();", StringComparison.Ordinal) < bridgeStart.IndexOf("_ = StartCoreAsync();", StringComparison.Ordinal)
+    && mainCode.Contains("_bridge.StateChanged += Bridge_StateChanged;", StringComparison.Ordinal)
+    && mainCode.Contains("_bridge.StateChanged -= Bridge_StateChanged;", StringComparison.Ordinal), "A failed bridge must close its controller and reconnect on the next start, and the bridge status must follow the connection state.");
 Assert(loginCode.Contains("IsWebMessageEnabled = false", StringComparison.Ordinal)
     && loginCode.Contains("WebViewProfile.GetEnvironmentAsync()", StringComparison.Ordinal)
     && bridgeCode.Contains("WebViewProfile.GetEnvironmentAsync()", StringComparison.Ordinal), "Sign-in keeps WebMessage disabled and shares the single WebView2 environment with the bridge.");
@@ -1159,4 +1165,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.11 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.12 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
