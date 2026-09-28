@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.14.6
+
+- Fixed Administration Members staying on the loading indicator and crashing when reopened after switching sections. Some member statuses referenced a missing XAML style; the page now uses the defined style. Read and rendering failures also settle into the existing localized error state.
+- Administration remains read-only. No Web API or bridge contract changed.
+
 ## v0.14.5
 
 - Added the native, read-only Administration page for approved site administrators (account menu → Administration). A section list on the left (above the content in narrow windows) switches between Requests, Projects, Members, Reservations, Discord, Maintenance and Audit, following the web admin panel; only the chosen section is loaded.

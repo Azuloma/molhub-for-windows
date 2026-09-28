@@ -1,5 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using FusionLedger.Windows;
 
 static void Assert(bool condition, string message)
@@ -47,8 +49,25 @@ var root = new DirectoryInfo(AppContext.BaseDirectory);
 while (root is not null && !File.Exists(Path.Combine(root.FullName, "FusionLedger.Windows.csproj"))) root = root.Parent;
 Assert(root is not null, "Source root must be discoverable.");
 var sourceRoot = root!.FullName;
-// ----- Administration (v0.14.5, display only) -----
+// ----- Administration (v0.14.6, display only) -----
 AdministrationPolicyTests.Run(sourceRoot);
+// Every literal style/resource key looked up from code must exist in App.xaml or the WinUI XamlControlsResources
+// (v0.14.6: a missing Members status style threw on render, leaving the loading indicator and crashing on reselect).
+XNamespace xamlNs = "http://schemas.microsoft.com/winfx/2006/xaml";
+var appResourceKeys = XDocument.Load(Path.Combine(sourceRoot, "App.xaml")).Descendants()
+    .Select(element => (string?)element.Attribute(xamlNs + "Key")).OfType<string>().ToHashSet(StringComparer.Ordinal);
+string[] winUiResourceKeys = ["TitleTextBlockStyle", "SubtitleTextBlockStyle", "BodyTextBlockStyle", "BodyStrongTextBlockStyle", "CaptionTextBlockStyle",
+    "AccentButtonStyle", "SubtleButtonStyle", "DefaultContentDialogStyle", "SymbolThemeFontFamily"];
+var resourceLookup = new Regex(@"\bRes\(([^()]*)\)|Application\.Current\.Resources\[([^\]]*)\]");
+var resourceUses = Directory.GetFiles(Path.Combine(sourceRoot, "Pages"), "*.cs", SearchOption.AllDirectories)
+    .Concat(Directory.GetFiles(Path.Combine(sourceRoot, "Shell"), "*.cs", SearchOption.AllDirectories))
+    .SelectMany(file => resourceLookup.Matches(File.ReadAllText(file)).SelectMany(match =>
+        Regex.Matches(match.Value, "\"([^\"]+)\"").Select(literal => (File: Path.GetFileName(file), Key: literal.Groups[1].Value))))
+    .ToList();
+Assert(appResourceKeys.Contains("DashboardCaptionTextStyle") && resourceUses.Count > 50
+    && resourceUses.Any(use => use.File == "AdministrationView.Members.cs"), "Resource key scan must find App.xaml keys and code lookups, including Members.");
+foreach (var use in resourceUses)
+    Assert(appResourceKeys.Contains(use.Key) || winUiResourceKeys.Contains(use.Key), $"{use.File} looks up resource \"{use.Key}\", which App.xaml does not define.");
 var mainXaml = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml"));
 var mainCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml.cs"));
 var loginXaml = File.ReadAllText(Path.Combine(sourceRoot, "Auth", "LoginWindow.xaml"));
@@ -166,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.5</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.5.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.5.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.5.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.6</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.6.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.6.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.6.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.5", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.5", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.5", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.4", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.5 above v0.14.4 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.6", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.6", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.6", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.5", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.6 above v0.14.5 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -1120,4 +1139,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.5 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.6 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

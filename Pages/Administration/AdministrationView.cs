@@ -63,7 +63,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
             _activeRequestGeneration++;
             _refresh.IsEnabled = true; _more.IsEnabled = true;
             _status.IsOpen = false; _status.ActionButton = null;
-            _selected = section; _loadFailed = false; RenderSelected();
+            _selected = section; _loadFailed = false; RenderSelectedSafely();
             if (!_loadedAt.TryGetValue(section, out var loaded) || DateTimeOffset.Now - loaded > StaleAfter) _ = LoadSectionAsync(section, false);
         };
         _sections.SelectedIndex = 0;
@@ -83,7 +83,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         root.SizeChanged += (_, e) => layout.Apply(e.NewSize.Width);
         _scroll = PageParts.CenteredPage(root, 1280);
         Content = _scroll;
-        RenderSelected();
+        RenderSelectedSafely();
     }
 
     private string L(string key) => _p.L(key);
@@ -93,7 +93,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
     public bool TryGoBack()
     {
         if (_announcementDetail is null || _selected != "Maintenance") return false;
-        _announcementDetail = null; RenderSelected(); _content.UpdateLayout(); _scroll.UpdateLayout();
+        _announcementDetail = null; RenderSelectedSafely(); _content.UpdateLayout(); _scroll.UpdateLayout();
         _scroll.ChangeView(null, _maintenanceOffset, null, true); _navigationChanged(); return true;
     }
     public Task EnsureLoadedAsync() => !_loadedAt.TryGetValue(_selected, out var loaded) || DateTimeOffset.Now - loaded > StaleAfter
@@ -115,10 +115,25 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         _refresh.IsEnabled = false; _more.IsEnabled = false;
         var command = AdministrationModel.Command(section);
         var payload = AdministrationModel.IsPaged(section) ? AdministrationModel.ListPayload(section, append ? _next.GetValueOrDefault(section) ?? 0 : 0) : null;
-        var result = command is null ? null : await _request(command, payload);
+        BridgeResult? result;
+        try
+        {
+            result = command is null ? null : await _request(command, payload);
+        }
+        catch (Exception ex)
+        {
+            LogFailure("request", section, ex);
+            result = null;
+        }
         if (_generations.GetValueOrDefault(section) != generation || _activeRequestGeneration != activeGeneration || _selected != section) return;
         _refresh.IsEnabled = true; _more.IsEnabled = true;
-        if (result is null) return;
+        if (result is null)
+        {
+            _loadFailed = true;
+            ShowErrorFor(null);
+            RenderSelectedSafely();
+            return;
+        }
         if (!result.Ok)
         {
             _loadFailed = true;
@@ -133,25 +148,35 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
                 _maintenance = new AdminMaintenance(false, null, []); _maintenanceUnavailable = true; _loadedAt[section] = DateTimeOffset.Now; _status.IsOpen = false;
             }
             else ShowErrorFor(result);
-            if (section == _selected) RenderSelected();
+            if (section == _selected) RenderSelectedSafely();
             return;
         }
         _forbidden = false;
-        var valid = section switch
+        bool valid;
+        try
         {
-            "Requests" => StorePaged(section, result.Data is { } requestData ? AdministrationModel.ParseRequests(requestData, result.Meta) : null, append),
-            "Projects" or "Reservations" => StoreProjects(result.Data is { } projectData ? AdministrationModel.ParseProjects(projectData, result.Meta) : null, append),
-            "Members" => StoreMembers(result.Data is { } memberData ? AdministrationModel.ParseMembers(memberData, result.Meta) : null, append),
-            "Discord" => StoreDiscord(result.Data is { } discordData ? AdministrationModel.ParseDiscord(discordData) : null),
-            "Maintenance" => StoreMaintenance(result.Data is { } maintenanceData ? AdministrationModel.ParseMaintenance(maintenanceData) : null),
-            "Audit" => StoreAudit(result.Data is { } auditData ? AdministrationModel.ParseAudit(auditData, result.Meta) : null, append),
-            _ => false
-        };
+            valid = section switch
+            {
+                "Requests" => StorePaged(section, result.Data is { } requestData ? AdministrationModel.ParseRequests(requestData, result.Meta) : null, append),
+                "Projects" or "Reservations" => StoreProjects(result.Data is { } projectData ? AdministrationModel.ParseProjects(projectData, result.Meta) : null, append),
+                "Members" => StoreMembers(result.Data is { } memberData ? AdministrationModel.ParseMembers(memberData, result.Meta) : null, append),
+                "Discord" => StoreDiscord(result.Data is { } discordData ? AdministrationModel.ParseDiscord(discordData) : null),
+                "Maintenance" => StoreMaintenance(result.Data is { } maintenanceData ? AdministrationModel.ParseMaintenance(maintenanceData) : null),
+                "Audit" => StoreAudit(result.Data is { } auditData ? AdministrationModel.ParseAudit(auditData, result.Meta) : null, append),
+                _ => false
+            };
+        }
+        catch (Exception ex)
+        {
+            LogFailure("parse", section, ex);
+            valid = false;
+        }
         if (!valid)
         {
+            ClearSectionData(section);
             _loadFailed = true;
             ShowErrorFor(null);
-            if (section == _selected) RenderSelected();
+            if (section == _selected) RenderSelectedSafely();
             return;
         }
         _loadFailed = false;
@@ -159,7 +184,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         if (section is "Projects" or "Reservations") _loadedAt[section == "Projects" ? "Reservations" : "Projects"] = _loadedAt[section];
         _status.IsOpen = false;
         if (section == "Maintenance") _maintenanceUnavailable = false;
-        if (section == _selected) RenderSelected();
+        if (section == _selected) RenderSelectedSafely();
     }
 
     private bool StorePaged(string section, AdminPage<AdminRequest>? page, bool append)
@@ -211,6 +236,22 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         _loadedAt.Clear(); _next.Clear(); _maintenanceUnavailable = false; _announcementDetail = null;
     }
 
+    private void ClearSectionData(string section)
+    {
+        switch (section)
+        {
+            case "Requests": _requests.Remove(section); break;
+            case "Projects":
+            case "Reservations": _projects = null; _loadedAt.Remove("Projects"); _loadedAt.Remove("Reservations"); _next.Remove("Projects"); _next.Remove("Reservations"); break;
+            case "Members": _members = null; break;
+            case "Discord": _discord = null; break;
+            case "Maintenance": _maintenance = null; _maintenanceUnavailable = false; _announcementDetail = null; break;
+            case "Audit": _audit = null; break;
+        }
+        _loadedAt.Remove(section);
+        _next.Remove(section);
+    }
+
     private void ShowErrorFor(BridgeResult? result)
     {
         if (result is null) ShowError("Admin_ErrorTitle", "Dashboard_ErrorUnexpected");
@@ -234,6 +275,27 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         }
         _status.IsOpen = true;
     }
+
+    private void RenderSelectedSafely()
+    {
+        try
+        {
+            RenderSelected();
+        }
+        catch (Exception ex)
+        {
+            LogFailure("render", _selected, ex);
+            ClearSectionData(_selected);
+            _loadFailed = true;
+            ShowErrorFor(null);
+            try { RenderErrorMessage(); }
+            catch { _content.Content = null; _more.Visibility = Visibility.Collapsed; }
+        }
+    }
+
+    // Exception type and HRESULT only: messages can carry server data.
+    private static void LogFailure(string stage, string section, Exception ex) =>
+        System.Diagnostics.Debug.WriteLine($"Administration {section} {stage} failed: {ex.GetType().Name} 0x{ex.HResult:X8}");
 
     private void RenderSelected()
     {

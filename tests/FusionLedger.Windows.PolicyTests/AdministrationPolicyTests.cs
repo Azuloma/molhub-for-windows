@@ -17,6 +17,27 @@ internal static class AdministrationPolicyTests
         var administrationCode = string.Join("\r\n", Directory.GetFiles(Path.Combine(sourceRoot, "Pages", "Administration"), "*.cs").Select(File.ReadAllText));
         var shell = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml.cs"));
         Check(view.Contains("PageParts.CenteredPage(root, 1280)", StringComparison.Ordinal), "page must use the centered 1280-DIP column.");
+        Check(view.Contains("result = command is null ? null : await _request(command, payload);", StringComparison.Ordinal)
+            && view.Contains("if (result is null)", StringComparison.Ordinal)
+            && view.Contains("RenderSelectedSafely();", StringComparison.Ordinal)
+            && view.Contains("ClearSectionData(section);", StringComparison.Ordinal),
+            "Members loads must turn request, parse, and render failures into the existing localized error state.");
+        var directRenders = administrationCode.Split("RenderSelected();").Length - 1;
+        var safeStart = view.IndexOf("private void RenderSelectedSafely()", StringComparison.Ordinal);
+        var renderStart = view.IndexOf("private void RenderSelected()", StringComparison.Ordinal);
+        var safeBlock = safeStart >= 0 && renderStart > safeStart ? view[safeStart..renderStart] : "";
+        var directRender = safeBlock.IndexOf("RenderSelected();", StringComparison.Ordinal);
+        var renderCatch = safeBlock.IndexOf("catch (Exception ex)", StringComparison.Ordinal);
+        Check(directRenders == 1 && directRender >= 0 && renderCatch > directRender
+            && safeBlock.IndexOf("_loadFailed = true;", renderCatch, StringComparison.Ordinal) > renderCatch
+            && safeBlock.IndexOf("RenderErrorMessage();", renderCatch, StringComparison.Ordinal) > renderCatch,
+            "section rendering must go through RenderSelectedSafely so a render exception cannot escape a selection handler or leave the loading indicator.");
+        var logStart = view.IndexOf("private static void LogFailure(", StringComparison.Ordinal);
+        var logLine = logStart >= 0 ? view[logStart..view.IndexOf(';', logStart)] : "";
+        Check(logLine.Contains("ex.GetType().Name", StringComparison.Ordinal) && logLine.Contains("ex.HResult", StringComparison.Ordinal)
+            && !logLine.Contains("ex.Message", StringComparison.Ordinal) && !logLine.Contains("ex}", StringComparison.Ordinal)
+            && !logLine.Contains("ToString()", StringComparison.Ordinal)
+            && view.Split("LogFailure(\"").Length - 1 == 3, "request, parse, and render failures must log only exception type and HRESULT.");
         Check(AdministrationModel.Sections.SequenceEqual(["Requests", "Projects", "Members", "Reservations", "Discord", "Maintenance", "Audit"])
             && AdministrationModel.DefaultSection == "Requests", "section order/default must match the web.");
         Check(AdministrationModel.Command("Requests") == "adminRequests" && AdministrationModel.Command("Reservations") == "adminProjects"
@@ -52,8 +73,9 @@ internal static class AdministrationPolicyTests
             && AdministrationModel.DeletedProjects(projects).Count == 1 && reservations.Count == 2
             && reservations.Any(item => item.Holder == "owner")
             && reservations.Any(item => item.ReservationPresent && item.Holder is null), "deleted projects and reservation presence must be split independently from nullable holder names.");
-        var members = AdministrationModel.ParseMembers(Json("[{\"id\":\"u1\",\"username\":\"User\",\"status\":null,\"role\":null,\"avatar\":null}]"), null);
-        Check(members is { Items.Count: 1 } && members.Items[0].Status == "" && members.Items[0].Role == "member", "member DTO must handle nullable fields.");
+        var members = AdministrationModel.ParseMembers(Json("[{\"id\":\"u1\",\"username\":\"User\",\"status\":null,\"role\":null,\"avatar\":null},{\"id\":\"u2\",\"username\":\"With avatar\",\"status\":\"approved\",\"role\":\"admin\",\"avatar\":\"data:image/png;base64,not-valid\"}]"), Json("{\"total\":2,\"nextOffset\":50}"));
+        Check(members is { Items.Count: 2, Total: 2, NextOffset: 50 } && members.Items[0].Status == "" && members.Items[0].Role == "member"
+            && members.Items[1].Avatar is null && members.Items[1].Status == "approved" && members.Items[1].Role == "admin", "member DTO must preserve role/status/paging and fall back safely from an invalid avatar.");
         var discord = AdministrationModel.ParseDiscord(Json("{\"setup\":{\"configured\":true,\"checks\":{\"applicationId\":true}},\"links\":[{\"guildId\":\"g\",\"channelId\":\"c\",\"projectDeleted\":true,\"projectName\":null,\"channelName\":null,\"locale\":null}],\"deliveries\":[{\"status\":\"future\",\"commitId\":\"commit-id\",\"attempts\":null,\"projectName\":null,\"channelName\":null,\"lastError\":null}]}"));
         Check(discord is { Setup.Configured: true, Setup.ApplicationId: true, Links.Count: 1, Deliveries.Count: 1 }
             && discord.Links[0] is { Deleted: true, ProjectName: "", ChannelName: "", Language: "" }
@@ -83,7 +105,7 @@ internal static class AdministrationPolicyTests
         var malformedStart = view.IndexOf("if (!valid)", loadStart, StringComparison.Ordinal);
         var failureBlock = loadStart >= 0 && malformedStart > loadStart ? view[loadStart..malformedStart] : "";
         Check(failureBlock.Contains("ShowErrorFor(result)", StringComparison.Ordinal)
-            && failureBlock.Contains("if (section == _selected) RenderSelected();", StringComparison.Ordinal)
+            && failureBlock.Contains("if (section == _selected) RenderSelectedSafely();", StringComparison.Ordinal)
             && view.Contains("private bool _loadFailed;", StringComparison.Ordinal)
             && view.Contains("_loadFailed = true;", StringComparison.Ordinal)
             && view.Contains("if (_loadFailed) RenderErrorMessage();", StringComparison.Ordinal)
@@ -94,7 +116,7 @@ internal static class AdministrationPolicyTests
         var selectionBlock = selectionStart >= 0 && selectionEnd > selectionStart ? view[selectionStart..selectionEnd] : "";
         Check(selectionBlock.Contains("_status.IsOpen = false;", StringComparison.Ordinal)
             && selectionBlock.Contains("_status.ActionButton = null;", StringComparison.Ordinal)
-            && selectionBlock.IndexOf("_status.IsOpen = false;", StringComparison.Ordinal) < selectionBlock.IndexOf("RenderSelected();", StringComparison.Ordinal)
+            && selectionBlock.IndexOf("_status.IsOpen = false;", StringComparison.Ordinal) < selectionBlock.IndexOf("RenderSelectedSafely();", StringComparison.Ordinal)
             && selectionBlock.Contains("_activeRequestGeneration++;", StringComparison.Ordinal)
             && view.Contains("_activeRequestGeneration != activeGeneration", StringComparison.Ordinal)
             && view.Contains("_selected != section", StringComparison.Ordinal),
@@ -117,7 +139,7 @@ internal static class AdministrationPolicyTests
             .Concat(new[] { "approved", "rejected", "suspended", "force_release", "reset_code_issued", "password_reset", "project_created", "admin_created", "admin_recovered", "project_deleted", "project_restored", "auth_smoke_test", "discord_linked", "discord_disabled", "discord_retry", "discord_commands_registered", "discord_commands_migrated" }.Select(action => "Admin_Audit_" + action))
             .Concat(new[] { "pending", "sending", "sent", "failed", "cancelled" }.Select(status => "Admin_Discord_Status_" + status));
         foreach (var key in requiredKeys) Check(localizedAdminKeys["en-US"].Contains(key), $"both locales must define {key}.");
-        Check(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.5</Version>", StringComparison.Ordinal)
-            && File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.5.0\"", StringComparison.Ordinal), "release version must be v0.14.5.");
+        Check(File.ReadAllText(Path.Combine(sourceRoot, "FusionLedger.Windows.csproj")).Contains("<Version>0.14.6</Version>", StringComparison.Ordinal)
+            && File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.6.0\"", StringComparison.Ordinal), "release version must be v0.14.6.");
     }
 }

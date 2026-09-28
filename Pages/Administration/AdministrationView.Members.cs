@@ -36,7 +36,7 @@ internal sealed partial class AdministrationView
             Text = key.Length == 0 ? status : L(key),
             Style = status == "approved" ? PageParts.Res("ProjectStatusAvailableTextStyle")
                 : status == "pending" ? PageParts.Res("ProjectStatusWorkingTextStyle")
-                : PageParts.Res("DashboardCaptionTextBlockStyle")
+                : PageParts.Res("DashboardCaptionTextStyle")
         };
         var pill = new Border { Style = PageParts.Res("ProjectPrivateBadgeStyle"), Child = text };
         AutomationProperties.SetName(pill, text.Text);

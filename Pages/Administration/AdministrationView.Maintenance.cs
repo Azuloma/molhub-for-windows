@@ -35,7 +35,7 @@ internal sealed partial class AdministrationView
             body.Children.Add(AnnouncementCard.Row(announcement, L, _language, () =>
             {
                 _maintenanceOffset = _scroll.VerticalOffset;
-                _announcementDetail = announcement; RenderSelected(); _scroll.ChangeView(null, 0, null, true); _navigationChanged();
+                _announcementDetail = announcement; RenderSelectedSafely(); _scroll.ChangeView(null, 0, null, true); _navigationChanged();
             }));
         }
         return new StackPanel { Spacing = 16, Children = { Card("Admin_Maintenance", "\uE90F", body) } };
