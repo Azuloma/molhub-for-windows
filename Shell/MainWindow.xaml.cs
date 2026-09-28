@@ -30,6 +30,7 @@ public sealed partial class MainWindow : Window
     private MaintenanceView? _maintenance;
     private ManagementView? _management;
     private ProfileView? _profile;
+    private AdministrationView? _administration;
     // One write at a time for the whole app (Projects, Commit history, Project management and Profile settings).
     private readonly WriteGate _writeGate = new();
     private string _bridgeStatusKey = "BridgeConnecting";
@@ -239,6 +240,7 @@ public sealed partial class MainWindow : Window
         ApplyHeaderAvatars();
         _projects?.UserChanged();
         _commitHistory?.UserChanged();
+        _administration?.UserChanged();
         OnWorkChanged();
     }
 
@@ -336,12 +338,13 @@ public sealed partial class MainWindow : Window
         SyncNavigationSelection(page);
     }
 
-    /// <summary>The page's own screen stack (Projects, Commit history or Server maintenance), which Back walks first.</summary>
+    /// <summary>The page's own screen stack (Projects, Commit history, Server maintenance or Administration), which Back walks first.</summary>
     private IScreenStack? CurrentStackPage => _currentPage switch
     {
         NativePage.Projects => _projects,
         NativePage.CommitHistory => _commitHistory,
         NativePage.ServerMaintenance => _maintenance,
+        NativePage.Administration => _administration,
         _ => null
     };
 
@@ -370,6 +373,7 @@ public sealed partial class MainWindow : Window
         if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();
         if (page == NativePage.ProjectManagement) return CreateManagementPage();
         if (page == NativePage.ProfileSettings) return CreateProfilePage();
+        if (page == NativePage.Administration) return CreateAdministrationPage();
         if (page == NativePage.AppSettings) return CreateSettingsPage();
         if (page == NativePage.VersionInfo) return CreateVersionInfoPage();
 
@@ -465,6 +469,16 @@ public sealed partial class MainWindow : Window
         return _maintenance;
     }
 
+    private FrameworkElement CreateAdministrationPage()
+    {
+        _administration ??= new AdministrationView(L, ReadLanguage(),
+            (command, payload) => _bridge.RequestAsync(command, payload),
+            SignOutWhenWritesFinish,
+            UpdateBackButton);
+        _ = _administration.EnsureLoadedAsync();
+        return _administration;
+    }
+
     /// <summary>Opens a project's publish form from the Dashboard (list and project underneath for Back).</summary>
     private void OpenPublish(string projectId, string name)
     {
@@ -479,6 +493,7 @@ public sealed partial class MainWindow : Window
         _projects?.MarkStale();
         _commitHistory?.MarkStale();
         _management?.MarkStale();
+        _administration?.MarkStale();
     }
 
     /// <summary>Opens a project overview from another page (the list stays underneath for Back).</summary>

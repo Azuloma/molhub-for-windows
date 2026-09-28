@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.5
+
+- Added the native, read-only Administration page for approved site administrators (account menu → Administration). A section list on the left (above the content in narrow windows) switches between Requests, Projects, Members, Reservations, Discord, Maintenance and Audit, following the web admin panel; only the chosen section is loaded.
+- Requests shows each deletion, restoration or Discord request with its project, reason, requester, date and status. Projects lists active projects with "Working · holder" or "Available for work", and deleted projects with their deletion date. Members shows each account's avatar, role and status. Reservations lists the active work reservations with holder and start time. Audit lists administrative actions with actor, date and target. Long lists offer "Load more".
+- Discord shows whether the Discord App is configured (the four setup checks, never secret values), the linked channels with copyable server and channel IDs, and the recent deliveries with status, attempts and the last error. Maintenance shows the current state and the completed history as announcement cards, shared with Server maintenance.
+- Nothing can be changed from this page yet: approving accounts, reset codes, creating, deleting or restoring projects, releasing reservations, reviewing requests, starting or completing maintenance and Discord actions stay on the web for now.
+
 ## v0.14.4
 
 - Fixed Profile settings being pushed to the right and cut off in wide windows: the page column is now centered at up to 960 px. Server maintenance and Project management (up to 960 px) and Dashboard, Projects and Commit history (up to 1280 px) use the same centering, so they no longer shift when their content is short.
