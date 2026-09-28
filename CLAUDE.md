@@ -26,7 +26,7 @@
 
 ## Build and verify
 
-Commands are in `AGENTS.md` (run from this checkout's root). UI tests, automated device checks and CI are required parts of verification; no UI test project or CI workflow exists yet, so state which parts were automated. CI must run at least restore, the policy tests and the x64 Debug build on a Windows runner, with no signing secrets. The former device-check procedure and its UI Automation pitfalls are in Git history (`git show 2614892:.claude/agents/device-verifier.md`); read it before a device check.
+Commands are in `AGENTS.md` (run from this checkout's root). UI tests, automated device checks and CI are required parts of verification; the CI workflow runs restore, the policy tests and the x64 Debug build on a Windows runner without signing secrets. No UI test project exists yet, so state which parts were automated. The former device-check procedure and its UI Automation pitfalls are in Git history (`git show 2614892:.claude/agents/device-verifier.md`); read it before a device check.
 
 ## Index (read on demand)
 

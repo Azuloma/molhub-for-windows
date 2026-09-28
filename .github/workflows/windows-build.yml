@@ -1,0 +1,23 @@
+name: Windows build
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore --locked-mode
+      - name: Policy tests
+        run: dotnet run --project tests/FusionLedger.Windows.PolicyTests/FusionLedger.Windows.PolicyTests.csproj
+      - name: x64 Debug build
+        run: dotnet build FusionLedger.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
