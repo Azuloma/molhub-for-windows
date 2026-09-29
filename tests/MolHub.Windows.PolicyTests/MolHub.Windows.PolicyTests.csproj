@@ -15,6 +15,7 @@
     <Compile Include="..\..\Auth\LoginWindowLayoutPolicy.cs" Link="LoginWindowLayoutPolicy.cs" />
     <Compile Include="..\..\Shell\FlyoutPlacementPolicy.cs" Link="FlyoutPlacementPolicy.cs" />
     <Compile Include="..\..\Bridge\BridgePolicy.cs" Link="BridgePolicy.cs" />
+    <Compile Include="..\..\Bridge\BridgeStartup.cs" Link="BridgeStartup.cs" />
     <Compile Include="..\..\Pages\Dashboard\DashboardModel.cs" Link="DashboardModel.cs" />
     <Compile Include="..\..\Pages\Projects\ProjectsModel.cs" Link="ProjectsModel.cs" />
     <Compile Include="..\..\Pages\History\HistoryModel.cs" Link="HistoryModel.cs" />

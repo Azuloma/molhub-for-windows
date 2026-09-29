@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.14
+
+- Fixed pages waiting forever when the data bridge could not start. After 20 seconds they now show the connection error with Retry, and Retry connects the bridge again.
+- A start attempt that finishes late, after a timeout or a newer attempt, is now ignored and its browser controller is closed.
+- No Web API or bridge contract changed.
+
 ## v0.14.13
 
 - Fixed the Projects list, a project's Commits tab and Commit history sometimes showing an older answer after repeated Refresh, adding an old "Load more" page to a refreshed list, or sending "Load more" twice. Load more is now disabled while the list loads and hidden after a failed refresh until a refresh succeeds.

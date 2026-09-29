@@ -56,6 +56,8 @@ public static partial class BridgePolicy
     /// <summary>Host timeouts sit above the page's own 15 s / 30 s aborts so the page normally reports first.</summary>
     public static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(20);
     public static readonly TimeSpan WriteTimeout = TimeSpan.FromSeconds(40);
+    /// <summary>Deadline for the whole bridge start: environment, controller creation with retries, and navigation.</summary>
+    public static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(20);
 
     // Mirrors the fixed operation map in public/webview-bridge.js (the duplicate `deleteMember` alias is omitted).
     private static readonly HashSet<string> ReadCommands = new(StringComparer.Ordinal)

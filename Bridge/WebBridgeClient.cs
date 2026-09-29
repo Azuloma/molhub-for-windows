@@ -22,12 +22,23 @@ public enum BridgeConnectionState
 internal sealed class WebBridgeClient : IDisposable
 {
     private readonly Dictionary<string, TaskCompletionSource<BridgeResult>> _pending = new(StringComparer.Ordinal);
-    private TaskCompletionSource<bool>? _ready;
+    private readonly BridgeStartup _startup = new(BridgePolicy.StartTimeout, delay => Task.Delay(delay));
     private IntPtr _hostWindow;
     private CoreWebView2Controller? _controller;
     private CoreWebView2? _core;
+    private int _coreGeneration;
+    private string _startStage = "window";
     private bool _disposed;
 
+    public WebBridgeClient()
+    {
+        _startup.Expired += Startup_Expired;
+    }
+
+    /// <summary>
+    /// <see cref="BridgeConnectionState.Connected"/> means the bridge document loaded; it does not yet prove that the
+    /// page script listens (a readiness handshake may upgrade this later).
+    /// </summary>
     public BridgeConnectionState State { get; private set; } = BridgeConnectionState.NotStarted;
 
     /// <summary>Diagnostic for the last failure: the stage and an HRESULT or WebView2 error status. Never contains page data.</summary>
@@ -36,55 +47,66 @@ internal sealed class WebBridgeClient : IDisposable
     public event EventHandler? StateChanged;
 
     /// <summary>
-    /// Starts the bridge; the task completes with true when the bridge page is loaded and listening. A start in progress
-    /// or a live connection is shared by every caller; after a failure the next call closes the failed controller and
-    /// connects again, so a later request (for example a page's Retry) reconnects without restarting the app.
+    /// Starts the bridge; the task completes with true when the bridge document is loaded (Connected) and false when the
+    /// start failed or passed <see cref="BridgePolicy.StartTimeout"/>. A start in progress or a live connection is shared
+    /// by every caller; after a failure the next call tears down the failed controller and connects again, so a later
+    /// request (for example a page's Retry) reconnects without restarting the app.
     /// </summary>
     public Task<bool> StartAsync()
     {
-        if (_disposed) return Task.FromResult(false);
-        if (_ready is null || State == BridgeConnectionState.Unavailable)
+        var request = _startup.Request();
+        if (request.IsNewAttempt)
         {
-            CloseController();
-            _ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _ = StartCoreAsync();
+            Teardown(BridgeConnectionState.Connecting, "BRIDGE_UNAVAILABLE");
+            _ = StartCoreAsync(request.Generation);
         }
-        return _ready.Task;
+        return request.Task;
     }
 
-    private async Task StartCoreAsync()
+    private async Task StartCoreAsync(int generation)
     {
-        SetState(BridgeConnectionState.Connecting);
-        var stage = "window";
+        _startStage = "window";
         try
         {
             if (_hostWindow == IntPtr.Zero)
                 _hostWindow = CreateWindowExW(0, "Static", "MolHub data bridge", WS_POPUP, 0, 0, 0, 0,
                     IntPtr.Zero, IntPtr.Zero, GetModuleHandleW(null), IntPtr.Zero);
             if (_hostWindow == IntPtr.Zero) throw new InvalidOperationException("Bridge host window unavailable.");
+            _startStage = "environment";
 
             // Right after sign-in the sign-in WebView may still be shutting down the shared browser process,
             // so controller creation is retried with a short backoff before the bridge is reported unavailable.
+            // The environment and the controller being created stay in locals; nothing reaches a field until the
+            // generation is checked after each await, so a timed-out or superseded attempt changes nothing.
+            CoreWebView2Controller controller;
             for (var attempt = 1; ; attempt++)
             {
                 try
                 {
-                    stage = "environment";
                     var environment = await WebViewProfile.GetEnvironmentAsync();
-                    if (_disposed) return;
-                    stage = "controller";
-                    _controller = await environment.CreateCoreWebView2ControllerAsync(
+                    if (!_startup.IsCurrent(generation)) return;
+                    _startStage = "controller";
+                    var created = await environment.CreateCoreWebView2ControllerAsync(
                         CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hostWindow));
+                    if (!_startup.IsCurrent(generation))
+                    {
+                        CloseQuietly(created);
+                        return;
+                    }
+                    controller = created;
                     break;
                 }
-                catch (Exception ex) when (attempt < 3 && !_disposed)
+                catch (Exception ex) when (attempt < 3 && _startup.IsCurrent(generation))
                 {
-                    LastError = $"{stage} 0x{ex.HResult:X8} (attempt {attempt})";
+                    LastError = $"{_startStage} 0x{ex.HResult:X8} (attempt {attempt})";
                     await Task.Delay(TimeSpan.FromSeconds(attempt));
+                    if (!_startup.IsCurrent(generation)) return;
+                    _startStage = "environment";
                 }
             }
-            if (_disposed) { _controller.Close(); _controller = null; return; }
-            stage = "settings";
+            _startStage = "settings";
+            _controller = controller;
+            _coreGeneration = generation;
             _controller.IsVisible = false;
 
             _core = _controller.CoreWebView2;
@@ -106,12 +128,12 @@ internal sealed class WebBridgeClient : IDisposable
             _core.DownloadStarting += Core_DownloadStarting;
             _core.WebMessageReceived += Core_WebMessageReceived;
             _core.ProcessFailed += Core_ProcessFailed;
-            stage = "navigate";
+            _startStage = "navigate";
             _core.Navigate(BridgePolicy.BridgeUri.AbsoluteUri);
         }
         catch (Exception ex)
         {
-            Fail($"{stage} 0x{ex.HResult:X8}");
+            Fail(generation, $"{_startStage} 0x{ex.HResult:X8}");
         }
     }
 
@@ -151,6 +173,7 @@ internal sealed class WebBridgeClient : IDisposable
 
     private void Core_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
+        if (!ReferenceEquals(sender, _core)) { e.Cancel = true; return; }
         if (BridgePolicy.IsBridgeDocument(TryParseUri(e.Uri))) return;
         e.Cancel = true;
     }
@@ -159,15 +182,15 @@ internal sealed class WebBridgeClient : IDisposable
 
     private void Core_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
-        if (_disposed || State != BridgeConnectionState.Connecting) return;
+        if (!ReferenceEquals(sender, _core) || _disposed || State != BridgeConnectionState.Connecting) return;
+        var generation = _coreGeneration;
         if (e.IsSuccess && BridgePolicy.IsBridgeDocument(TryParseUri(_core?.Source)))
         {
-            SetState(BridgeConnectionState.Connected);
-            _ready?.TrySetResult(true);
+            if (_startup.Succeed(generation)) SetState(BridgeConnectionState.Connected);
         }
         else
         {
-            Fail(e.IsSuccess ? "navigation unexpected document" : $"navigation {e.WebErrorStatus} {e.HttpStatusCode}");
+            Fail(generation, e.IsSuccess ? "navigation unexpected document" : $"navigation {e.WebErrorStatus} {e.HttpStatusCode}");
         }
     }
 
@@ -183,6 +206,7 @@ internal sealed class WebBridgeClient : IDisposable
 
     private void Core_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
+        if (!ReferenceEquals(sender, _core)) return;
         if (!BridgePolicy.IsTrustedSource(e.Source)) return;
         string json;
         try { json = e.WebMessageAsJson; }
@@ -192,15 +216,25 @@ internal sealed class WebBridgeClient : IDisposable
         completion.TrySetResult(result);
     }
 
-    private void Core_ProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e) => Fail($"process {e.ProcessFailedKind}");
-
-    private void Fail(string reason)
+    private void Core_ProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
     {
-        if (_disposed) return;
+        if (!ReferenceEquals(sender, _core)) return;
+        Fail(_coreGeneration, $"process {e.ProcessFailedKind}");
+    }
+
+    /// <summary>Fails the live generation (only if it still applies) and tears the connection down.</summary>
+    private void Fail(int generation, string reason)
+    {
+        if (!_startup.Fail(generation)) return;
         LastError = reason;
-        SetState(BridgeConnectionState.Unavailable);
-        _ready?.TrySetResult(false);
-        FailPending("BRIDGE_UNAVAILABLE");
+        Teardown(BridgeConnectionState.Unavailable, "BRIDGE_UNAVAILABLE");
+    }
+
+    /// <summary>The deadline passed while the generation was still starting; it is already failed in the coordinator.</summary>
+    private void Startup_Expired(int generation)
+    {
+        LastError = $"start timeout ({_startStage})";
+        Teardown(BridgeConnectionState.Unavailable, "BRIDGE_UNAVAILABLE");
     }
 
     private void FailPending(string code)
@@ -223,17 +257,19 @@ internal sealed class WebBridgeClient : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        FailPending("BRIDGE_CLOSED");
-        _ready?.TrySetResult(false);
-        SetState(BridgeConnectionState.Closed);
         _disposed = true;
-        CloseController();
+        _startup.Dispose();
+        Teardown(BridgeConnectionState.Closed, "BRIDGE_CLOSED");
         if (_hostWindow != IntPtr.Zero) DestroyWindow(_hostWindow);
         _hostWindow = IntPtr.Zero;
     }
 
-    /// <summary>Detaches and closes the current controller; the host window stays for the next connection.</summary>
-    private void CloseController()
+    /// <summary>
+    /// The single teardown for failure, deadline expiry, a new attempt and <see cref="Dispose"/>: unsubscribes every
+    /// event, closes the controller, clears the fields, fails pending requests (writes stay Unknown) and sets the state.
+    /// Idempotent; the host window stays for the next connection.
+    /// </summary>
+    private void Teardown(BridgeConnectionState state, string pendingCode)
     {
         if (_core is { } core)
         {
@@ -246,9 +282,17 @@ internal sealed class WebBridgeClient : IDisposable
             core.WebMessageReceived -= Core_WebMessageReceived;
             core.ProcessFailed -= Core_ProcessFailed;
         }
+        var controller = _controller;
         _core = null;
-        try { _controller?.Close(); } catch { /* The browser process may already be gone. */ }
         _controller = null;
+        CloseQuietly(controller);
+        FailPending(pendingCode);
+        SetState(_disposed ? BridgeConnectionState.Closed : state);
+    }
+
+    private static void CloseQuietly(CoreWebView2Controller? controller)
+    {
+        try { controller?.Close(); } catch { /* The browser process may already be gone. */ }
     }
 
     private static Uri? TryParseUri(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;

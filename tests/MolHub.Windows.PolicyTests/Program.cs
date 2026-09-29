@@ -185,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.13</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.13.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.13.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.13.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.14</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.14.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.14.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.14.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.13", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.13", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.13", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.12", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.13 above v0.14.12 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.14", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.14", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.14", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.13", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.14 above v0.14.13 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -320,12 +320,122 @@ Assert(bridgeCode.Contains("settings.IsWebMessageEnabled = true", StringComparis
 Assert(!bridgeCode.Contains("ExecuteScriptAsync", StringComparison.Ordinal) && !bridgeCode.Contains("AddScriptToExecuteOnDocumentCreated", StringComparison.Ordinal)
     && !bridgeCode.Contains("AddHostObjectToScript", StringComparison.Ordinal) && !bridgeCode.Contains("CookieManager", StringComparison.Ordinal)
     && !bridgeCode.Contains("GetCookies", StringComparison.Ordinal), "The bridge host must not inject script, expose host objects or touch cookies.");
-var bridgeStart = bridgeCode[bridgeCode.IndexOf("public Task<bool> StartAsync()", StringComparison.Ordinal)..bridgeCode.IndexOf("private async Task StartCoreAsync()", StringComparison.Ordinal)];
-Assert(bridgeStart.Contains("State == BridgeConnectionState.Unavailable", StringComparison.Ordinal)
-    && bridgeStart.IndexOf("CloseController();", StringComparison.Ordinal) >= 0
-    && bridgeStart.IndexOf("CloseController();", StringComparison.Ordinal) < bridgeStart.IndexOf("_ = StartCoreAsync();", StringComparison.Ordinal)
+var bridgeStart = bridgeCode[bridgeCode.IndexOf("public Task<bool> StartAsync()", StringComparison.Ordinal)..bridgeCode.IndexOf("private async Task StartCoreAsync(int generation)", StringComparison.Ordinal)];
+Assert(bridgeStart.Contains("_startup.Request()", StringComparison.Ordinal)
+    && bridgeStart.Contains("request.IsNewAttempt", StringComparison.Ordinal)
+    && bridgeStart.IndexOf("Teardown(", StringComparison.Ordinal) >= 0
+    && bridgeStart.IndexOf("Teardown(", StringComparison.Ordinal) < bridgeStart.IndexOf("_ = StartCoreAsync(request.Generation);", StringComparison.Ordinal)
     && mainCode.Contains("_bridge.StateChanged += Bridge_StateChanged;", StringComparison.Ordinal)
-    && mainCode.Contains("_bridge.StateChanged -= Bridge_StateChanged;", StringComparison.Ordinal), "A failed bridge must close its controller and reconnect on the next start, and the bridge status must follow the connection state.");
+    && mainCode.Contains("_bridge.StateChanged -= Bridge_StateChanged;", StringComparison.Ordinal), "A failed bridge must tear down its controller and reconnect on the next start, and the bridge status must follow the connection state.");
+
+// ----- Bridge start coordinator (v0.14.14): generations, one shared start, whole-start deadline (Bridge/BridgeStartup.cs) -----
+Assert(BridgePolicy.StartTimeout == TimeSpan.FromSeconds(20), "The whole bridge start must have a 20 s deadline.");
+{
+    var delays = new List<TaskCompletionSource>();
+    Task Delay(TimeSpan _)
+    {
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        delays.Add(gate);
+        return gate.Task;
+    }
+    static async Task Settle() { for (var i = 0; i < 5; i++) await Task.Yield(); await Task.Delay(20); }
+
+    // Concurrent requests share one task and one attempt.
+    using (var startup = new BridgeStartup(TimeSpan.FromSeconds(20), Delay))
+    {
+        var firstStart = startup.Request();
+        var secondStart = startup.Request();
+        Assert(firstStart.IsNewAttempt && !secondStart.IsNewAttempt && ReferenceEquals(firstStart.Task, secondStart.Task) && firstStart.Generation == secondStart.Generation
+            && startup.Phase == BridgeStartupPhase.Starting && delays.Count == 1, "Concurrent starts must share one attempt, one task and one deadline watch.");
+        Assert(startup.IsCurrent(firstStart.Generation) && !startup.IsCurrent(firstStart.Generation + 1), "Only the current starting generation is current.");
+        Assert(startup.Succeed(firstStart.Generation) && await firstStart.Task && startup.Phase == BridgeStartupPhase.Ready
+            && startup.IsLive(firstStart.Generation) && !startup.IsCurrent(firstStart.Generation), "Succeed must complete the shared task with true.");
+        var ready = startup.Request();
+        Assert(!ready.IsNewAttempt && ready.Task.IsCompletedSuccessfully && ready.Task.Result && delays.Count == 1, "A ready bridge must return the completed true task without a new attempt.");
+        delays[0].SetResult();
+        await Settle();
+        Assert(startup.Phase == BridgeStartupPhase.Ready, "A deadline after success must do nothing.");
+        Assert(startup.Fail(firstStart.Generation) && startup.Phase == BridgeStartupPhase.Failed, "A failure after connecting (process failure) must apply to the live generation.");
+        var again = startup.Request();
+        Assert(again.IsNewAttempt && again.Generation == firstStart.Generation + 1 && !ReferenceEquals(again.Task, firstStart.Task), "After a failure the next request must start a new generation.");
+    }
+
+    // Fail then reconnect.
+    delays.Clear();
+    using (var startup = new BridgeStartup(TimeSpan.FromSeconds(20), Delay))
+    {
+        var firstStart = startup.Request();
+        Assert(startup.Fail(firstStart.Generation) && !await firstStart.Task && startup.Phase == BridgeStartupPhase.Failed, "Fail must complete the task with false.");
+        Assert(!startup.Fail(firstStart.Generation) && !startup.Succeed(firstStart.Generation), "A failed generation must refuse further results.");
+        var retry = startup.Request();
+        Assert(retry.IsNewAttempt && retry.Generation == firstStart.Generation + 1 && startup.Phase == BridgeStartupPhase.Starting, "A request after a failure must reconnect.");
+        delays[0].SetResult();
+        await Settle();
+        Assert(startup.Phase == BridgeStartupPhase.Starting && startup.IsCurrent(retry.Generation), "The old attempt's deadline must not expire the new attempt.");
+    }
+
+    // A stalled start expires; the next request retries; the old attempt's late results are refused.
+    delays.Clear();
+    using (var startup = new BridgeStartup(TimeSpan.FromSeconds(20), Delay))
+    {
+        var expired = new List<int>();
+        startup.Expired += expired.Add;
+        var firstStart = startup.Request();
+        delays[0].SetResult();
+        await Settle();
+        Assert(expired.SequenceEqual(new[] { firstStart.Generation }) && firstStart.Task.IsCompleted && !firstStart.Task.Result && startup.Phase == BridgeStartupPhase.Failed, "A stalled start must expire at the deadline with a false task and raise Expired.");
+        var retry = startup.Request();
+        Assert(retry.IsNewAttempt && retry.Generation == firstStart.Generation + 1, "A request after expiry must retry.");
+        Assert(!startup.Succeed(firstStart.Generation) && !startup.Fail(firstStart.Generation) && !startup.IsCurrent(firstStart.Generation)
+            && startup.Phase == BridgeStartupPhase.Starting && !retry.Task.IsCompleted, "An old attempt's late Succeed or Fail must be refused and leave the new attempt alone.");
+        Assert(startup.Succeed(retry.Generation) && await retry.Task, "The new attempt must still succeed.");
+    }
+
+    // Dispose during a start.
+    delays.Clear();
+    using (var startup = new BridgeStartup(TimeSpan.FromSeconds(20), Delay))
+    {
+        var expired = new List<int>();
+        startup.Expired += expired.Add;
+        var firstStart = startup.Request();
+        startup.Dispose();
+        Assert(firstStart.Task.IsCompleted && !firstStart.Task.Result && startup.Phase == BridgeStartupPhase.Disposed, "Dispose during a start must complete the task with false.");
+        Assert(!startup.Succeed(firstStart.Generation) && !startup.Fail(firstStart.Generation) && !startup.IsCurrent(firstStart.Generation) && !startup.IsLive(firstStart.Generation), "A disposed coordinator must refuse results.");
+        var after = startup.Request();
+        Assert(!after.IsNewAttempt && after.Task.IsCompleted && !after.Task.Result && delays.Count == 1, "A disposed coordinator must start nothing.");
+        delays[0].SetResult();
+        await Settle();
+        Assert(expired.Count == 0, "A deadline after Dispose must do nothing.");
+    }
+}
+var bridgeStartupCode = File.ReadAllText(Path.Combine(sourceRoot, "Bridge", "BridgeStartup.cs"));
+Assert(!bridgeStartupCode.Contains("WebView2", StringComparison.Ordinal) && !bridgeStartupCode.Contains("Microsoft.UI", StringComparison.Ordinal)
+    && !bridgeCode.Contains("ConfigureAwait", StringComparison.Ordinal), "The start coordinator must stay free of WebView2/WinUI types and the client must resume on the UI thread.");
+var startCore = bridgeCode[bridgeCode.IndexOf("private async Task StartCoreAsync(int generation)", StringComparison.Ordinal)..bridgeCode.IndexOf("public async Task<BridgeResult> RequestAsync", StringComparison.Ordinal)];
+var startAwaits = System.Text.RegularExpressions.Regex.Matches(startCore, @"await ").Count;
+var startChecks = System.Text.RegularExpressions.Regex.Matches(startCore, @"if \(!_startup\.IsCurrent\(generation\)\)").Count;
+Assert(startAwaits == 3 && startChecks == 3
+    && startCore.IndexOf("if (!_startup.IsCurrent(generation)) return;", StringComparison.Ordinal) > startCore.IndexOf("await WebViewProfile.GetEnvironmentAsync()", StringComparison.Ordinal)
+    && startCore.IndexOf("CloseQuietly(created);", StringComparison.Ordinal) > startCore.IndexOf("await environment.CreateCoreWebView2ControllerAsync", StringComparison.Ordinal)
+    && startCore.IndexOf("_controller = controller;", StringComparison.Ordinal) > startCore.IndexOf("CloseQuietly(created);", StringComparison.Ordinal)
+    && startCore.IndexOf("_core = _controller.CoreWebView2;", StringComparison.Ordinal) > startCore.IndexOf("_controller = controller;", StringComparison.Ordinal)
+    && startCore.IndexOf("if (!_startup.IsCurrent(generation)) return;", StartCoreLastAwait(startCore), StringComparison.Ordinal) > StartCoreLastAwait(startCore)
+    && startCore.Contains("catch (Exception ex) when (attempt < 3 && _startup.IsCurrent(generation))", StringComparison.Ordinal),
+    "StartCoreAsync must check the generation after each await before touching fields, and close a controller that arrives late.");
+static int StartCoreLastAwait(string source) => source.LastIndexOf("await Task.Delay", StringComparison.Ordinal);
+Assert(bridgeCode.Contains("if (!ReferenceEquals(sender, _core)) { e.Cancel = true; return; }", StringComparison.Ordinal)
+    && System.Text.RegularExpressions.Regex.Matches(bridgeCode, @"if \(!ReferenceEquals\(sender, _core\)").Count == 4
+    && bridgeCode.Contains("_startup.Succeed(generation)", StringComparison.Ordinal), "Event handlers must ignore any sender other than the current core.");
+var teardownBody = bridgeCode[bridgeCode.IndexOf("private void Teardown(", StringComparison.Ordinal)..bridgeCode.IndexOf("private static void CloseQuietly", StringComparison.Ordinal)];
+var failBody = bridgeCode[bridgeCode.IndexOf("private void Fail(int generation", StringComparison.Ordinal)..bridgeCode.IndexOf("private void FailPending", StringComparison.Ordinal)];
+var disposeBody = bridgeCode[bridgeCode.IndexOf("public void Dispose()", StringComparison.Ordinal)..bridgeCode.IndexOf("private void Teardown(", StringComparison.Ordinal)];
+Assert(System.Text.RegularExpressions.Regex.Matches(bridgeCode, @"private void Teardown\(").Count == 1
+    && failBody.Contains("Teardown(BridgeConnectionState.Unavailable", StringComparison.Ordinal)
+    && failBody.Contains("start timeout (", StringComparison.Ordinal)
+    && disposeBody.Contains("Teardown(BridgeConnectionState.Closed", StringComparison.Ordinal) && disposeBody.Contains("DestroyWindow(_hostWindow)", StringComparison.Ordinal)
+    && teardownBody.Contains("core.ProcessFailed -= Core_ProcessFailed;", StringComparison.Ordinal)
+    && teardownBody.Contains("CloseQuietly(controller);", StringComparison.Ordinal) && teardownBody.Contains("FailPending(pendingCode);", StringComparison.Ordinal)
+    && bridgeCode.Contains("_startup.Fail(generation)", StringComparison.Ordinal), "Failure, expiry and Dispose must share one teardown path.");
 Assert(loginCode.Contains("IsWebMessageEnabled = false", StringComparison.Ordinal)
     && loginCode.Contains("WebViewProfile.GetEnvironmentAsync()", StringComparison.Ordinal)
     && bridgeCode.Contains("WebViewProfile.GetEnvironmentAsync()", StringComparison.Ordinal), "Sign-in keeps WebMessage disabled and shares the single WebView2 environment with the bridge.");
@@ -1355,4 +1465,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.13 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.14 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
