@@ -45,8 +45,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
     private string _query = string.Empty;
     private int _projectTotal;
     private int? _accessibleTotal;
-    private int? _projectNext;
-    private DateTimeOffset _listLoadedAt;
+    // Ticket, list generation, normalized query and next offset of the project list (see LoadState.cs).
+    private readonly PagedLoadState<string> _list = new();
     private StackPanel? _projectRows;
     private Button? _loadMoreProjects;
     private PersonPicture? _selfAvatar;
@@ -98,11 +98,13 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         public Func<Task>? Load { get; set; }
         /// <summary>Reloads data into the already built content (the history keeps its filters).</summary>
         public Func<Task>? Refresh { get; set; }
-        public DateTimeOffset LoadedAt { get; set; }
-        /// <summary>A write elsewhere (Project management, another page) may have changed this project's reservation.</summary>
-        public bool WorkStale { get; set; }
-        /// <summary>Bumped by every load; an older reply that arrives later is dropped.</summary>
-        public int LoadGeneration { get; set; }
+        /// <summary>
+        /// Ticket, phase and freshness of this screen's data. A write elsewhere (Project management, another page) invalidates
+        /// it, so a shown project reloads when shown again; an older reply that arrives later is dropped.
+        /// </summary>
+        public LoadState State { get; set; } = new();
+        /// <summary>The commit timeline built on this screen (the Commits tab or the history), invalidated with the screen.</summary>
+        public PagedLoadState<CommitFilter>? Timeline { get; set; }
     }
 
     private Screen? Current => _stack.Count > 0 ? _stack[^1] : null;
@@ -132,11 +134,13 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
 
     private Task RefreshRootIfStale()
     {
-        // An open project whose reservation may have changed on another page is reloaded when shown again.
-        if (Current is { Kind: ScreenKind.Project, WorkStale: true, Content: not null } project) return ReloadProjectAsync(project);
-        if (_stack.Count != 1 || Current is not { Content: not null } root) return Task.CompletedTask;
-        if (root.Kind == ScreenKind.List) return DateTimeOffset.Now - _listLoadedAt > StaleAfter ? LoadListAsync(append: false) : Task.CompletedTask;
-        return root.Refresh is { } refresh && DateTimeOffset.Now - root.LoadedAt > StaleAfter ? refresh() : Task.CompletedTask;
+        var now = DateTimeOffset.Now;
+        // An open project whose reservation may have changed on another page is reloaded when shown again (an invalidated
+        // project has no loaded time; age alone never reloads it).
+        if (Current is { Kind: ScreenKind.Project, Content: not null } project && project.State.NeedsLoad(now, TimeSpan.MaxValue)) return ReloadProjectAsync(project);
+        if (_stack.Count != 1 || Current is not { Content: not null } root || !root.State.NeedsLoad(now, StaleAfter)) return Task.CompletedTask;
+        if (root.Kind == ScreenKind.List) return LoadListAsync(append: false);
+        return root.Refresh?.Invoke() ?? Task.CompletedTask;
     }
 
     public bool TryGoBack()
@@ -157,7 +161,7 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
 
     private Screen RootScreen() => _root == ProjectsRoot.History ? HistoryScreen() : ListScreen();
 
-    private Screen ListScreen() => new(ScreenKind.List, string.Empty, L("Page_Projects")) { Load = () => LoadListAsync(append: false) };
+    private Screen ListScreen() => new(ScreenKind.List, string.Empty, L("Page_Projects")) { Load = () => LoadListAsync(append: false), State = _list };
 
     private void Push(Screen screen)
     {
@@ -272,16 +276,28 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
     {
         var screen = _stack.FirstOrDefault(s => s.Kind == ScreenKind.List);
         if (screen is null) return;
-        var query = _query;
-        if (_loadMoreProjects is not null) _loadMoreProjects.IsEnabled = false;
+        PagedTicket<string> ticket;
+        if (append)
+        {
+            // Not accepted while any load of the list runs or there is no next page: the list and the button stay as they are.
+            if (_list.BeginMore() is not { } more) return;
+            ticket = more;
+        }
+        else
+        {
+            ticket = _list.BeginFirst(_query);
+        }
+        UpdateLoadMore();
 
-        var result = await _request("projects", ProjectsModel.ListPayload(query, append ? _projectNext ?? 0 : 0));
-        if (query != _query) return;
-        if (_loadMoreProjects is not null) _loadMoreProjects.IsEnabled = true;
+        var result = await _request("projects", ProjectsModel.ListPayload(ticket.Condition, ticket.Offset));
+        // A newer refresh, search or Load more (or a changed list) owns the list and its button now.
+        if (!(append ? _list.AcceptMore(ticket) : _list.AcceptFirst(ticket))) return;
 
         var page = result.Ok && result.Data is { } data ? ProjectsModel.ParseProjectList(data, result.Meta) : null;
         if (page is null)
         {
+            _list.FailPage(ticket, DateTimeOffset.Now);
+            UpdateLoadMore();
             ShowError(screen, result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result), () => LoadListAsync(append));
             return;
         }
@@ -290,9 +306,8 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         var added = page.Projects.Where(project => _projects.All(existing => existing.Id != project.Id)).ToList();
         _projects.AddRange(added);
         _projectTotal = page.Total;
-        _projectNext = page.NextOffset;
-        if (query.Length == 0) _accessibleTotal = page.Total;
-        _listLoadedAt = DateTimeOffset.Now;
+        _list.CompletePage(ticket, page.NextOffset, DateTimeOffset.Now);
+        if (ticket.Condition.Length == 0) _accessibleTotal = page.Total;
 
         if (append && _projectRows is not null && screen.Content is not null)
         {
@@ -382,7 +397,9 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
 
     private void UpdateLoadMore()
     {
-        if (_loadMoreProjects is not null) _loadMoreProjects.Visibility = _projectNext is null ? Visibility.Collapsed : Visibility.Visible;
+        if (_loadMoreProjects is null) return;
+        _loadMoreProjects.Visibility = _list.NextOffset is null ? Visibility.Collapsed : Visibility.Visible;
+        _loadMoreProjects.IsEnabled = _list.CanLoadMore;
     }
 
     private void ApplyQuery(string text)
@@ -390,7 +407,6 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         var query = ProjectsModel.NormalizeQuery(text);
         if (query == _query && Current?.Content is not null) return;
         _query = query;
-        _projectNext = null;
         _ = LoadListAsync(append: false);
     }
 

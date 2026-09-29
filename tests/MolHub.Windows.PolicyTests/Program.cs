@@ -185,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.12</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.12.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.12.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.12.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.13</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.13.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.13.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.13.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.12", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.12", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.12", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.11", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.12 above v0.14.11 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.13", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.13", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.13", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.12", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.13 above v0.14.12 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -697,7 +697,7 @@ Assert(mainCode.Contains("if (page == NativePage.ProjectManagement) return Creat
     && !System.Text.RegularExpressions.Regex.IsMatch(managementCode, "[\uE000-\uF8FF]") && !managementCode.Contains("GLYPH_", StringComparison.Ordinal),
     "Project management must be the native page with the web's management writes and escaped glyphs.");
 Assert(managementCode.Contains("if (!_gate.TryEnter())", StringComparison.Ordinal) && managementCode.Contains("ManageWriteModel.Explain(result, createsRecord)", StringComparison.Ordinal)
-    && managementCode.Contains("LoadDetailAsync(++_generation, keepContent: true)", StringComparison.Ordinal)
+    && managementCode.Contains("LoadDetailAsync(_load.Begin(), keepContent: true)", StringComparison.Ordinal)
     && managementCode.Contains("DefaultButton = ContentDialogButton.Close", StringComparison.Ordinal)
     && System.Text.RegularExpressions.Regex.Matches(managementCode, "await ConfirmAsync\\(").Count == 3
     && System.Text.RegularExpressions.Regex.IsMatch(mainCode, @"new ManagementView\([^;]*_writeGate,\s*OnWorkChanged\);"),
@@ -705,9 +705,10 @@ Assert(managementCode.Contains("if (!_gate.TryEnter())", StringComparison.Ordina
 var projectsStackCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.cs"))
     + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Work.cs"))
     + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Project.cs"));
-Assert(projectsStackCode.Contains("foreach (var screen in _stack.Where(s => s.Kind == ScreenKind.Project)) screen.WorkStale = true;", StringComparison.Ordinal)
-    && projectsStackCode.Contains("if (Current is { Kind: ScreenKind.Project, WorkStale: true, Content: not null } project) return ReloadProjectAsync(project);", StringComparison.Ordinal)
-    && projectsStackCode.Contains("screen.WorkStale = false;", StringComparison.Ordinal),
+Assert(projectsStackCode.Contains("screen.State.Invalidate();", StringComparison.Ordinal)
+    && projectsStackCode.Contains("screen.Timeline?.Invalidate();", StringComparison.Ordinal)
+    && projectsStackCode.Contains("if (Current is { Kind: ScreenKind.Project, Content: not null } project && project.State.NeedsLoad(now, TimeSpan.MaxValue)) return ReloadProjectAsync(project);", StringComparison.Ordinal)
+    && projectsStackCode.Contains("var ticket = screen.State.Begin();", StringComparison.Ordinal),
     "An open project reloads when shown again after a write on another page (e.g. a reservation released in Project management).");
 var manageKeys = System.Text.RegularExpressions.Regex.Matches(managementCode + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManagementModel.cs"))
         + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManageWriteModel.cs")), "\"(Manage_[A-Za-z0-9_]+)\"").Select(m => m.Groups[1].Value)
@@ -864,7 +865,7 @@ Assert(new[] { "startReservation", "cancelReservation", "publishCommit" }.All(c 
     && workCode.Contains("_pendingWriteNotice = (severity, title, message, sessionEnded);", StringComparison.Ordinal)
     && workCode.Contains("_stickyNotice = notice.Severity is InfoBarSeverity.Warning or InfoBarSeverity.Error;", StringComparison.Ordinal)
     && projectsCode.Contains("ShowPendingWriteNotice();", StringComparison.Ordinal) && projectsCode.Contains("if (!_stickyNotice) _statusBar.IsOpen = false;", StringComparison.Ordinal)
-    && projectsCode.Contains("if (generation != screen.LoadGeneration) return true;", StringComparison.Ordinal)
+    && projectsCode.Contains("if (!screen.State.IsCurrent(ticket)) return true;", StringComparison.Ordinal)
     && System.Text.RegularExpressions.Regex.Matches(mainCode, "_writeGate\\);").Count == 2
     && workCode.Contains("Style = PageParts.Res(\"DefaultContentDialogStyle\")", StringComparison.Ordinal)
     && !System.Text.RegularExpressions.Regex.IsMatch(workCode, "[\uE000-\uF8FF]") && !workCode.Contains("GLYPH_", StringComparison.Ordinal)
@@ -1032,6 +1033,169 @@ Assert(releasedCount == 1 && !inFlightInsideHandler, "Exit() must raise Released
 releaseGate.Exit();
 Assert(releasedCount == 2, "Released must fire on every Exit(), including one with no waiting write.");
 
+// ----- WriteGate closed state (v0.14.13): a sign-out closes the gate so no new write can start while "logout" is awaited -----
+var closableGate = new WriteGate();
+Assert(!closableGate.IsClosed && !closableGate.IsBusy && closableGate.RefusedTitleKey == "Work_BusyTitle" && closableGate.RefusedMessageKey == "Work_Busy",
+    "An open, idle gate is not busy and explains a refusal as 'another change is being sent'.");
+closableGate.Close();
+Assert(closableGate.IsClosed && closableGate.IsBusy && !closableGate.TryEnter() && !closableGate.InFlight
+    && closableGate.RefusedTitleKey == "Work_SigningOutTitle" && closableGate.RefusedMessageKey == "Work_SigningOut",
+    "A closed gate refuses TryEnter without entering, and explains the refusal as the sign-out.");
+closableGate.Reopen();
+Assert(!closableGate.IsClosed && closableGate.TryEnter() && closableGate.InFlight, "Reopen lets a write start again.");
+closableGate.Exit();
+var closeWhileWriting = new WriteGate();
+var closedReleased = 0;
+closeWhileWriting.Released += () => closedReleased++;
+Assert(closeWhileWriting.TryEnter(), "The first write enters.");
+closeWhileWriting.Close();
+Assert(closeWhileWriting.InFlight && !closeWhileWriting.TryEnter() && closedReleased == 0, "Closing does not touch a write that was already sent.");
+closeWhileWriting.Exit();
+Assert(closedReleased == 1 && !closeWhileWriting.InFlight && closeWhileWriting.IsClosed && !closeWhileWriting.TryEnter(),
+    "Released still fires on Exit while closed, and the gate stays closed afterwards.");
+
+// ----- Load state (v0.14.13): tickets, data version and list condition (Pages/Common/LoadState.cs) -----
+var loadNow = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+var loadStale = TimeSpan.FromSeconds(60);
+// Two refreshes answered in reverse order: only the newest answer is accepted and stored.
+var refreshTwice = new PagedLoadState<string>();
+var refreshOld = refreshTwice.BeginFirst("q");
+var refreshNew = refreshTwice.BeginFirst("q");
+Assert(!refreshTwice.AcceptFirst(refreshOld) && refreshTwice.AcceptFirst(refreshNew)
+    && !refreshTwice.CompletePage(refreshOld, 50, loadNow) && refreshTwice.NextOffset is null && refreshTwice.IsLoading && !refreshTwice.HasContent,
+    "The older of two refreshes must be dropped and leave the list, the next offset and the phase alone.");
+Assert(refreshTwice.CompletePage(refreshNew, 50, loadNow) && refreshTwice.NextOffset == 50 && refreshTwice.Phase == LoadPhase.Showing
+    && refreshTwice.HasContent && !refreshTwice.NeedsLoad(loadNow, loadStale) && refreshTwice.NeedsLoad(loadNow + TimeSpan.FromSeconds(61), loadStale),
+    "The newest refresh is stored as fresh, and the page reloads once it is older than the staleness limit.");
+// A Load more answered after a refresh is not appended and does not overwrite the next offset.
+var moreAfterRefresh = new PagedLoadState<string>();
+moreAfterRefresh.CompletePage(moreAfterRefresh.BeginFirst(""), 50, loadNow);
+var lateMore = moreAfterRefresh.BeginMore()!;
+var refreshAfterMore = moreAfterRefresh.BeginFirst("");
+Assert(!moreAfterRefresh.AcceptMore(lateMore) && !moreAfterRefresh.CompletePage(lateMore, 100, loadNow) && !moreAfterRefresh.FailPage(lateMore, loadNow)
+    && moreAfterRefresh.NextOffset is null && moreAfterRefresh.IsLoading && !moreAfterRefresh.CanLoadMore,
+    "A Load more that arrives after a refresh must not touch the list, the next offset or the button state of the newer load.");
+Assert(moreAfterRefresh.CompletePage(refreshAfterMore, 20, loadNow) && moreAfterRefresh.NextOffset == 20 && moreAfterRefresh.CanLoadMore,
+    "The refresh that superseded the Load more owns the list.");
+// Two Load more for the same offset: the second is not started while the first runs, and an answer for a used offset is dropped.
+var sameOffset = new PagedLoadState<string>();
+sameOffset.CompletePage(sameOffset.BeginFirst(""), 50, loadNow);
+var moreFirst = sameOffset.BeginMore()!;
+Assert(moreFirst.Offset == 50 && moreFirst.IsMore && sameOffset.BeginMore() is null && !sameOffset.CanLoadMore,
+    "While a Load more runs, a second Load more for the same offset is not accepted (the button is disabled).");
+Assert(sameOffset.CompletePage(moreFirst, 100, loadNow) && sameOffset.NextOffset == 100 && !sameOffset.AcceptMore(moreFirst)
+    && sameOffset.BeginMore() is { Offset: 100 }, "After the first Load more, the next one asks for the new offset and the used offset is not accepted again.");
+var noNext = new PagedLoadState<string>();
+noNext.CompletePage(noNext.BeginFirst(""), null, loadNow);
+Assert(noNext.BeginMore() is null && !noNext.CanLoadMore, "Without a next offset there is no Load more.");
+// Invalidate during a load: the answer is shown but not stored as fresh, so the page reloads when shown again.
+var invalidated = new LoadState();
+var beforeWrite = invalidated.Begin();
+invalidated.Invalidate();
+Assert(invalidated.Complete(beforeWrite, success: true, loadNow) && invalidated.Phase == LoadPhase.Showing && invalidated.HasContent
+    && invalidated.NeedsLoad(loadNow, loadStale), "A load that started before an invalidation is shown, is not fresh and needs a reload.");
+var afterWrite = invalidated.Begin();
+Assert(!invalidated.NeedsLoad(loadNow, loadStale), "A load that started after the invalidation is already on its way (no second, competing reload).");
+Assert(invalidated.Complete(afterWrite, success: true, loadNow) && !invalidated.NeedsLoad(loadNow, loadStale)
+    && invalidated.NeedsLoad(loadNow + TimeSpan.FromSeconds(61), loadStale), "The reload after the invalidation counts as fresh.");
+invalidated.Invalidate();
+Assert(invalidated.NeedsLoad(loadNow, loadStale), "Invalidate makes a fresh page need a load.");
+// Condition changed during Load more: the answer for the old condition is dropped even at the same offset.
+var conditionChange = new PagedLoadState<string>();
+conditionChange.CompletePage(conditionChange.BeginFirst("a"), 50, loadNow);
+var moreForOld = conditionChange.BeginMore()!;
+var searchNew = conditionChange.BeginFirst("b");
+conditionChange.CompletePage(searchNew, 50, loadNow);
+Assert(moreForOld.Condition == "a" && !conditionChange.AcceptMore(moreForOld) && conditionChange.Condition == "b" && conditionChange.NextOffset == 50,
+    "A Load more for the previous search condition must not be applied to the new list.");
+Assert(conditionChange.BeginMore() is { Condition: "b", Offset: 50 }, "Load more carries the current condition and offset.");
+var recordCondition = new PagedLoadState<CommitFilter>();
+var filterTicket = recordCondition.BeginFirst(new CommitFilter("x", 7, false));
+Assert(recordCondition.AcceptFirst(filterTicket) && !recordCondition.AcceptFirst(filterTicket with { Condition = CommitFilter.None }),
+    "The condition is compared by value (a record such as CommitFilter).");
+// Failure keeps the content and gives Retryable.
+var failing = new LoadState();
+failing.Complete(failing.Begin(), success: true, loadNow);
+var failedLoad = failing.Begin();
+Assert(failing.Complete(failedLoad, success: false, loadNow) && failing.Phase == LoadPhase.Retryable && failing.HasContent && failing.IsCurrent(failedLoad),
+    "A failed load keeps the content and offers a retry.");
+var failedMore = new PagedLoadState<string>();
+failedMore.CompletePage(failedMore.BeginFirst(""), 50, loadNow);
+var moreThatFails = failedMore.BeginMore()!;
+Assert(failedMore.FailPage(moreThatFails, loadNow) && failedMore.Phase == LoadPhase.Retryable && failedMore.NextOffset == 50 && failedMore.CanLoadMore
+    && failedMore.BeginMore() is { Offset: 50 }, "A failed Load more keeps the list and the offset, and can be retried.");
+var neverLoaded = new LoadState();
+Assert(neverLoaded.Phase == LoadPhase.NotLoaded && neverLoaded.NeedsLoad(loadNow, loadStale) && !neverLoaded.HasContent,
+    "A state that never loaded needs a load.");
+var beforeReset = neverLoaded.Begin();
+neverLoaded.Reset();
+Assert(!neverLoaded.IsCurrent(beforeReset) && !neverLoaded.Complete(beforeReset, true, loadNow) && neverLoaded.Phase == LoadPhase.NotLoaded && !neverLoaded.HasContent,
+    "Reset drops the answer of any earlier ticket.");
+Assert(!new LoadState().IsCurrent(default), "The default ticket is never current.");
+var pagedReset = new PagedLoadState<string>();
+var resetTicket = pagedReset.BeginFirst("q");
+pagedReset.CompletePage(resetTicket, 50, loadNow);
+var resetMore = pagedReset.BeginMore()!;
+pagedReset.Reset();
+Assert(pagedReset.NextOffset is null && pagedReset.Condition is null && !pagedReset.CanLoadMore && pagedReset.Phase == LoadPhase.NotLoaded && !pagedReset.HasContent
+    && !pagedReset.AcceptFirst(resetTicket) && !pagedReset.AcceptMore(resetMore) && !pagedReset.CompletePage(resetTicket, 99, loadNow)
+    && pagedReset.NextOffset is null && pagedReset.BeginMore() is null,
+    "Reset forgets the list: no next offset, no Load more, and a reply to any earlier paged ticket is not accepted.");
+var oneShotProjects = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Project.cs"));
+var oneShotWork = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Work.cs"));
+var oneShotHistory = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "History", "ProjectsView.History.cs"));
+static bool TakesTicket(string code, string signature)
+{
+    var start = code.IndexOf(signature, StringComparison.Ordinal);
+    if (start < 0) return false;
+    var body = code[start..Math.Min(code.Length, start + 1400)];
+    var begin = body.IndexOf("var ticket = screen.State.Begin();", StringComparison.Ordinal);
+    var request = body.IndexOf("await _request(", StringComparison.Ordinal);
+    var current = body.IndexOf("if (!screen.State.IsCurrent(ticket)) return;", StringComparison.Ordinal);
+    return begin >= 0 && request > begin && current > request && body.Contains("screen.State.Complete(ticket, success", StringComparison.Ordinal);
+}
+Assert(TakesTicket(oneShotProjects, "private async Task LoadCommitAsync") && TakesTicket(oneShotWork, "private async Task LoadPublishAsync")
+    && TakesTicket(oneShotHistory, "private async Task LoadHistoryScreenAsync") && oneShotHistory.Contains("screen.State = timelineState;", StringComparison.Ordinal),
+    "LoadCommitAsync, LoadPublishAsync and LoadHistoryScreenAsync must take a screen ticket, drop an older reply and complete the ticket.");
+var loadStateCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Common", "LoadState.cs"));
+Assert(!System.Text.RegularExpressions.Regex.IsMatch(loadStateCode, @"using Microsoft\.|\bDispatcherQueue\b|\bFrameworkElement\b"),
+    "LoadState must stay pure (no WinUI types).");
+
+// Source checks: no page keeps its own counter, loaded time or content flag any more; the shared state decides.
+var pageSourceFiles = Directory.GetFiles(Path.Combine(sourceRoot, "Pages"), "*.cs", SearchOption.AllDirectories)
+    .Where(file => !string.Equals(Path.GetFileName(file), "LoadState.cs", StringComparison.Ordinal)).ToList();
+var pageSourceText = string.Join("\n", pageSourceFiles.Select(File.ReadAllText));
+Assert(!System.Text.RegularExpressions.Regex.IsMatch(pageSourceText,
+        @"\b(_loadedAt|_listLoadedAt|LoadedAt|_generation|_generations|_activeRequestGeneration|LoadGeneration|WorkStale|_hasContent|_loadFailed|_loaded|_projectNext)\b")
+    && !System.Text.RegularExpressions.Regex.IsMatch(pageSourceText, @"\+\+_?generation|\+\+screen\."),
+    "No page may keep its own generation counter, loaded time or loaded/failed flag: go through LoadState tickets.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.cs")).Contains("_list.BeginFirst(_query)", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.cs")).Contains("_list.BeginMore()", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Project.cs")).Contains("state.BeginFirst(filter)", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Project.cs")).Contains("state.BeginMore()", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Maintenance", "MaintenanceView.cs")).Contains("_paging.BeginMore()", StringComparison.Ordinal)
+    && dashboardCode.Contains("_loadState.Begin()", StringComparison.Ordinal) && profileCode.Contains("_loadState.Begin()", StringComparison.Ordinal),
+    "The Projects list, the commit timelines, Maintenance, Dashboard and Profile must take their tickets from LoadState.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Work.cs")).Contains("_list.Invalidate();", StringComparison.Ordinal)
+    && dashboardCode.Contains("public void MarkStale() => _loadState.Invalidate();", StringComparison.Ordinal)
+    && managementCode.Contains("public void MarkStale() => _load.Invalidate();", StringComparison.Ordinal)
+    && File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Administration", "AdministrationView.cs")).Contains("set.Invalidate();", StringComparison.Ordinal),
+    "Every page that MainWindow marks stale after a write must invalidate its load states.");
+Assert(!profileCode.Contains("_loadState.Complete(writeTicket, success: true, DateTimeOffset.Now)", StringComparison.Ordinal) || profileCode.IndexOf("var writeTicket = _loadState.Begin();", StringComparison.Ordinal)
+        < profileCode.IndexOf("await _request(\"updateAvatar\", payload)", StringComparison.Ordinal),
+    "Profile stores the write's returned profile only through a ticket taken before the write.");
+Assert(!File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManagementView.cs")).Contains("_loadedAt", StringComparison.Ordinal)
+    && managementCode.IndexOf("_workChanged();", managementCode.IndexOf("private async Task RunWriteAsync", StringComparison.Ordinal), StringComparison.Ordinal)
+        < managementCode.IndexOf("LoadDetailAsync(_load.Begin(), keepContent: true)", StringComparison.Ordinal),
+    "Management reloads after a write with a ticket taken after the invalidation, never an unconditional 'now'.");
+
+// Source checks: every refused write explains the sign-out when the gate is closed.
+Assert(!pageSourceText.Contains("_gate.InFlight", StringComparison.Ordinal) && !pageSourceText.Contains("L(\"Work_BusyTitle\")", StringComparison.Ordinal)
+    && System.Text.RegularExpressions.Regex.Matches(pageSourceText, @"L\(_gate\.RefusedTitleKey\), L\(_gate\.RefusedMessageKey\)").Count == 8
+    && File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "WorkModel.cs")).Contains("if (InFlight || IsClosed) return false;", StringComparison.Ordinal),
+    "Projects work, the publish form, Management, Administration and Profile must explain a refused write through the gate's refusal keys.");
+
+
 // ----- Sign-out when the session already ended (password change, "Sign in again") waits for the gate instead of showing the blocked dialog -----
 var signOutWhenWritesFinishBody = mainCode[mainCode.IndexOf("private void SignOutWhenWritesFinish", StringComparison.Ordinal)..
     mainCode.IndexOf("private void SignOutWhenGateFree", StringComparison.Ordinal)];
@@ -1088,6 +1252,22 @@ Assert(signOutAsyncOnly.Contains("if (_writeGate.InFlight)", StringComparison.Or
     && signOutAsyncOnly.IndexOf("await ShowSignOutBlockedAsync();", StringComparison.Ordinal) > signOutAsyncOnly.IndexOf("if (_writeGate.InFlight)", StringComparison.Ordinal)
     && signOutAsyncOnly.IndexOf("_signingOut = true;", StringComparison.Ordinal) > signOutAsyncOnly.IndexOf("await ShowSignOutBlockedAsync();", StringComparison.Ordinal),
     "SignOutAsync must still refuse with ShowSignOutBlockedAsync while a write is in flight, before starting the sign-out.");
+
+// Source checks: sign-out closes the write gate before it awaits the logout, and an abandoned sign-out reopens it.
+var signOutClose = signOutAsyncOnly.IndexOf("_writeGate.Close();", StringComparison.Ordinal);
+Assert(signOutClose > signOutAsyncOnly.IndexOf("_signingOut = true;", StringComparison.Ordinal)
+    && signOutClose > signOutAsyncOnly.IndexOf("await ShowSignOutBlockedAsync();", StringComparison.Ordinal)
+    && !signOutAsyncOnly[signOutAsyncOnly.IndexOf("await ShowSignOutBlockedAsync();", StringComparison.Ordinal)..signOutClose]
+        .Replace("await ShowSignOutBlockedAsync();", string.Empty, StringComparison.Ordinal).Contains("await ", StringComparison.Ordinal)
+    && signOutClose < signOutAsyncOnly.IndexOf("RequestAsync(\"logout\")", StringComparison.Ordinal)
+    && signOutClose < signOutAsyncOnly.IndexOf("App.RequestSignOut();", StringComparison.Ordinal),
+    "SignOutAsync must close the write gate synchronously (no await after the InFlight check) before awaiting the logout.");
+var loginClosedBody = appCode[appCode.IndexOf("private void Login_Closed", StringComparison.Ordinal)..appCode.IndexOf("public static void RequestSignOut", StringComparison.Ordinal)];
+Assert(loginClosedBody.Contains("main.SignOutAbandoned();", StringComparison.Ordinal)
+    && loginClosedBody.IndexOf("main.SignOutAbandoned();", StringComparison.Ordinal) < loginClosedBody.IndexOf("return;", StringComparison.Ordinal)
+    && mainCode.Contains("internal void SignOutAbandoned() => _writeGate.Reopen();", StringComparison.Ordinal)
+    && mainCode.Contains("_writeGate.Reopen()", StringComparison.Ordinal),
+    "An abandoned sign-out (its login window closed while MainWindow stays open) must reopen the write gate.");
 
 // ----- ProfileView: a write's own reload is exempt from the write-in-progress guard, and the icon change always reaches MainWindow -----
 Assert(profileCode.Contains("if (_writing && !partOfWrite) return false;", StringComparison.Ordinal),
@@ -1169,4 +1349,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.12 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.13 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

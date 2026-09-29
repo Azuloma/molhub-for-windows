@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.13
+
+- Fixed the Projects list, a project's Commits tab and Commit history sometimes showing an older answer after repeated Refresh, adding an old "Load more" page to a refreshed list, or sending "Load more" twice. Load more is now disabled while the list loads and hidden after a failed refresh until a refresh succeeds.
+- Fixed a page being treated as up to date when a load that started before a change finished after it. Such an answer is still shown, but the page reloads the next time it is shown. Open projects reload only after a change, not by age.
+- Fixed a new change being sent while sign-out was in progress. It is now refused with "Changes can't be sent while you are being signed out."
+- No Web API or bridge contract changed.
+
 ## v0.14.12
 
 - Fixed the data bridge staying unavailable until the app was restarted after one failure (for example right after sign-in or when the browser process stopped). The next request, such as a page's Retry, now connects the bridge again.

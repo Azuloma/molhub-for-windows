@@ -35,8 +35,13 @@ internal sealed partial class ProjectsView
     private async Task LoadHistoryScreenAsync(Screen screen)
     {
         // The project filter is best effort: if the list cannot be read, the history itself reports the error.
+        var ticket = screen.State.Begin();
         var projects = await _request("projects", HistoryModel.ProjectOptionsPayload());
+        // An older load that answers after a newer one must not rebuild the page.
+        if (!screen.State.IsCurrent(ticket)) return;
         var options = projects.Ok && projects.Data is { } data ? HistoryModel.ProjectOptions(ProjectsModel.ParseProjectList(data, projects.Meta)) : [];
+        // The page is built from this answer either way (the project filter is best effort); building replaces the state with the timeline's.
+        screen.State.Complete(ticket, success: true, DateTimeOffset.Now);
         SetContent(screen, BuildHistoryContent(screen, options), null);
     }
 
@@ -90,6 +95,8 @@ internal sealed partial class ProjectsView
         // Without project options (their read failed), Refresh rebuilds the page so the project filter can return.
         reload = options.Count > 0 ? timelineReload : () => LoadHistoryScreenAsync(screen);
         screen.Refresh = reload;
+        // The history's freshness is that of its timeline (the timeline built just above registered it on the screen).
+        if (screen.Timeline is { } timelineState) screen.State = timelineState;
         return root;
     }
 

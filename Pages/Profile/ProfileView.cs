@@ -63,9 +63,8 @@ internal sealed class ProfileView : UserControl
     private bool _picking;
     // An icon write (and its reload) is running on this page.
     private bool _writing;
-    private bool _loaded;
-    private DateTimeOffset _loadedAt;
-    private int _generation;
+    // Ticket, phase and freshness of the profile read (see LoadState.cs).
+    private readonly LoadState _loadState = new();
 
     public ProfileView(Func<string, string> localize, Func<string, JsonObject?, Task<BridgeResult>> request, Func<AuthenticatedUser> user,
         WriteGate gate, Func<IntPtr> windowHandle, Action<byte[]?> avatarChanged, Action signInAgain, Action signOutAfterPasswordChange)
@@ -187,7 +186,7 @@ internal sealed class ProfileView : UserControl
 
     /// <summary>Loads on first display and again when the data is older than a minute (a chosen, unsaved image stays).</summary>
     public Task EnsureLoadedAsync() =>
-        !_loaded || DateTimeOffset.Now - _loadedAt > StaleAfter ? LoadAsync() : Task.CompletedTask;
+        _loadState.NeedsLoad(DateTimeOffset.Now, StaleAfter) ? LoadAsync() : Task.CompletedTask;
 
     /// <summary>
     /// Reads `profile`; returns whether the profile is now shown (false when failed or superseded). While an icon write
@@ -196,25 +195,25 @@ internal sealed class ProfileView : UserControl
     private async Task<bool> LoadAsync(bool partOfWrite = false)
     {
         if (_writing && !partOfWrite) return false;
-        var generation = ++_generation;
-        if (!_loaded) _body.Content = _p.LoadingIndicator("Profile_Loading");
+        var ticket = _loadState.Begin();
+        if (!_loadState.HasContent) _body.Content = _p.LoadingIndicator("Profile_Loading");
         _refresh.IsEnabled = false;
         var result = await _request("profile", null);
-        if (generation != _generation) return false;
+        if (!_loadState.IsCurrent(ticket)) return false;
         // A reload that is part of a write keeps Refresh disabled until the write finishes.
         _refresh.IsEnabled = _busy.Visibility != Visibility.Visible;
 
         var profile = result.Ok && result.Data is { } data ? ProfileModel.Parse(data) : null;
         if (profile is null)
         {
+            _loadState.Complete(ticket, success: false, DateTimeOffset.Now);
             ShowError(result.Ok ? DashboardError.Unexpected : DashboardModel.ErrorFor(result));
-            if (!_loaded) _body.Content = null;
+            if (!_loadState.HasContent) _body.Content = null;
             return false;
         }
         _statusBar.IsOpen = false;
         Apply(profile);
-        _loaded = true;
-        _loadedAt = DateTimeOffset.Now;
+        _loadState.Complete(ticket, success: true, DateTimeOffset.Now);
         _body.Content = _content;
         return true;
     }
@@ -348,13 +347,15 @@ internal sealed class ProfileView : UserControl
         }
         if (!_gate.TryEnter())
         {
-            ShowNotice(InfoBarSeverity.Informational, L("Work_BusyTitle"), L("Work_Busy"));
+            ShowNotice(InfoBarSeverity.Informational, L(_gate.RefusedTitleKey), L(_gate.RefusedMessageKey));
             return;
         }
         SetBusy(true);
         _writing = true;
-        // A read that started before this write must not show an older profile after it.
-        _generation++;
+        // A read that started before this write must not show an older profile after it: this ticket supersedes it, and the
+        // profile the write returns is stored as fresh only through this ticket (never an unconditional "now").
+        var writeTicket = _loadState.Begin();
+        var settled = false;
         try
         {
             _statusBar.IsOpen = false;
@@ -369,7 +370,7 @@ internal sealed class ProfileView : UserControl
                     if (updated is not null)
                     {
                         Apply(updated);
-                        _loadedAt = DateTimeOffset.Now;
+                        settled = _loadState.Complete(writeTicket, success: true, DateTimeOffset.Now);
                     }
                     else
                     {
@@ -399,6 +400,8 @@ internal sealed class ProfileView : UserControl
         }
         finally
         {
+            // A write that showed no profile leaves the page retryable (a superseding read has settled it already).
+            if (!settled) _loadState.Complete(writeTicket, success: false, DateTimeOffset.Now);
             _writing = false;
             SetBusy(false);
             _gate.Exit();
@@ -453,7 +456,7 @@ internal sealed class ProfileView : UserControl
         if (payload is null) return;
         if (!_gate.TryEnter())
         {
-            ShowNotice(InfoBarSeverity.Informational, L("Work_BusyTitle"), L("Work_Busy"));
+            ShowNotice(InfoBarSeverity.Informational, L(_gate.RefusedTitleKey), L(_gate.RefusedMessageKey));
             return;
         }
         WriteOutcome outcome;
@@ -525,9 +528,9 @@ internal sealed class ProfileView : UserControl
     /// <summary>Removing the icon and changing the password are confirmed first ("Cancel" is the default).</summary>
     private async Task<bool> ConfirmAsync(string title, string text, string action)
     {
-        if (_gate.InFlight)
+        if (_gate.IsBusy)
         {
-            ShowNotice(InfoBarSeverity.Informational, L("Work_BusyTitle"), L("Work_Busy"));
+            ShowNotice(InfoBarSeverity.Informational, L(_gate.RefusedTitleKey), L(_gate.RefusedMessageKey));
             return false;
         }
         var dialog = new ContentDialog

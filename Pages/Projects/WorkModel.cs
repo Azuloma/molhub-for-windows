@@ -11,12 +11,31 @@ public sealed class WriteGate
 {
     public bool InFlight { get; private set; }
 
+    /// <summary>True while a sign-out is under way: no new write may start (see <see cref="Close"/>).</summary>
+    public bool IsClosed { get; private set; }
+
+    /// <summary>True when <see cref="TryEnter"/> would refuse now (another write is running, or the gate is closed).</summary>
+    public bool IsBusy => InFlight || IsClosed;
+
+    /// <summary>Refuses a new write while another one is sent or while the gate is closed.</summary>
     public bool TryEnter()
     {
-        if (InFlight) return false;
+        if (InFlight || IsClosed) return false;
         InFlight = true;
         return true;
     }
+
+    /// <summary>Called when a sign-out starts: from now on <see cref="TryEnter"/> refuses. A write already sent is not affected.</summary>
+    public void Close() => IsClosed = true;
+
+    /// <summary>Called when a sign-out was abandoned and the window stays open.</summary>
+    public void Reopen() => IsClosed = false;
+
+    /// <summary>Resource key of the title that explains a refused write (a closed gate means signing out, otherwise another write is running).</summary>
+    public string RefusedTitleKey => IsClosed ? "Work_SigningOutTitle" : "Work_BusyTitle";
+
+    /// <summary>Resource key of the message that explains a refused write.</summary>
+    public string RefusedMessageKey => IsClosed ? "Work_SigningOut" : "Work_Busy";
 
     /// <summary>Raised after every <see cref="Exit"/>, once the gate is free again (the sign-out after a password change waits for it).</summary>
     public event Action? Released;

@@ -34,9 +34,8 @@ internal sealed class DashboardView : UserControl
     private FrameworkElement? _side;
     private FrameworkElement? _feed;
     private Button? _refreshButton;
-    private DateTimeOffset _loadedAt;
-    private bool _hasContent;
-    private int _generation;
+    // Ticket, phase and freshness of the dashboard data (see LoadState.cs).
+    private readonly LoadState _loadState = new();
 
     public DashboardView(Func<string, string> localize, AuthenticatedUser user, string language,
         Func<Task<BridgeResult>> load, Action<NativePage> navigate, Action<string, string> openProject, Action<string, string> openPublish,
@@ -62,34 +61,34 @@ internal sealed class DashboardView : UserControl
     }
 
     /// <summary>Reloads the next time the page is shown (a write changed reservations or commits).</summary>
-    public void MarkStale() => _loadedAt = default;
+    public void MarkStale() => _loadState.Invalidate();
 
     /// <summary>Loads on first display and again when the data is older than a minute.</summary>
     public Task EnsureLoadedAsync() =>
-        !_hasContent || DateTimeOffset.Now - _loadedAt > StaleAfter ? RefreshAsync() : Task.CompletedTask;
+        _loadState.NeedsLoad(DateTimeOffset.Now, StaleAfter) ? RefreshAsync() : Task.CompletedTask;
 
     public async Task RefreshAsync()
     {
-        var generation = ++_generation;
-        if (!_hasContent) _body.Content = LoadingIndicator();
+        var ticket = _loadState.Begin();
+        if (!_loadState.HasContent) _body.Content = LoadingIndicator();
         if (_refreshButton is not null) _refreshButton.IsEnabled = false;
 
         var result = await _load();
-        if (generation != _generation) return;
+        if (!_loadState.IsCurrent(ticket)) return;
         if (_refreshButton is not null) _refreshButton.IsEnabled = true;
 
         var data = result.Ok && result.Data is { } json ? DashboardModel.Parse(json) : null;
         if (data is null)
         {
+            _loadState.Complete(ticket, success: false, DateTimeOffset.Now);
             ShowError(result.Ok ? DashboardError.Unexpected : DashboardModel.ErrorFor(result));
-            if (!_hasContent) _body.Content = null;
+            if (!_loadState.HasContent) _body.Content = null;
             return;
         }
 
         _statusBar.IsOpen = false;
         _body.Content = BuildContent(data);
-        _hasContent = true;
-        _loadedAt = DateTimeOffset.Now;
+        _loadState.Complete(ticket, success: true, DateTimeOffset.Now);
         ApplyLayout(ActualWidth);
     }
 

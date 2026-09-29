@@ -99,9 +99,9 @@ internal sealed partial class AdministrationView
     /// </summary>
     private async Task RunMemberActionAsync(AdminMember member, MemberAction action)
     {
-        if (_gate.InFlight)
+        if (_gate.IsBusy)
         {
-            ShowMemberNotice(new(InfoBarSeverity.Informational, L("Work_BusyTitle"), L("Work_Busy")));
+            ShowMemberNotice(new(InfoBarSeverity.Informational, L(_gate.RefusedTitleKey), L(_gate.RefusedMessageKey)));
             return;
         }
         var payload = AdminUserWriteModel.Payload(action, member.Id);
@@ -110,7 +110,7 @@ internal sealed partial class AdministrationView
         if (!await ConfirmMemberActionAsync(member, action)) return;
         if (!_gate.TryEnter())
         {
-            ShowMemberNotice(new(InfoBarSeverity.Informational, L("Work_BusyTitle"), L("Work_Busy")));
+            ShowMemberNotice(new(InfoBarSeverity.Informational, L(_gate.RefusedTitleKey), L(_gate.RefusedMessageKey)));
             return;
         }
         IssuedResetCode? issued = null;
@@ -178,8 +178,7 @@ internal sealed partial class AdministrationView
         _writeProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
         _content.IsEnabled = !busy;
         _sections.IsEnabled = !busy;
-        _refresh.IsEnabled = !busy;
-        _more.IsEnabled = !busy;
+        UpdateControls();
     }
 
     /// <summary>A write result waits until Members is shown again and then stays until dismissed.</summary>

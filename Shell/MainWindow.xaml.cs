@@ -790,11 +790,17 @@ public sealed partial class MainWindow : Window
             return;
         }
         _signingOut = true;
+        // Same UI-thread turn as the check above: no new write may start while "logout" is awaited (a write that was refused
+        // explains the sign-out). The gate stays closed until this window closes, or until an abandoned sign-out reopens it.
+        _writeGate.Close();
         // Revoke the server session first when the bridge is up; local sign-in data is cleared either way.
         if (_bridge.State == BridgeConnectionState.Connected) await _bridge.RequestAsync("logout");
         App.RequestSignOut();
         _signingOut = false;
     }
+
+    /// <summary>The sign-out was abandoned (its login window was closed) and this window stays open: writes may start again.</summary>
+    internal void SignOutAbandoned() => _writeGate.Reopen();
 
     /// <summary>
     /// The session already ended on the server (a page's "Sign in again", or a password change that was applied or

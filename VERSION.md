@@ -1,5 +1,5 @@
 # Version policy
 
-Current version: **v0.14.12**
+Current version: **v0.14.13**
 
-The `<Version>` element in `MolHub.Windows.csproj` is the source of truth for the app's three-part display version. `Package.appxmanifest` carries the corresponding four-part package version (`0.14.12.0`) required by MSIX. Do not introduce a second display-version constant. Patch releases increment the third component; package versions append `.0`.
+The `<Version>` element in `MolHub.Windows.csproj` is the source of truth for the app's three-part display version. `Package.appxmanifest` carries the corresponding four-part package version (`0.14.13.0`) required by MSIX. Do not introduce a second display-version constant. Patch releases increment the third component; package versions append `.0`.

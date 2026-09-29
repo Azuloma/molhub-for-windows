@@ -83,6 +83,8 @@ public partial class App : Application
         if (_signingOut && MainWindow is not null)
         {
             _signingOut = false;
+            // The window stays open, so the write gate that the sign-out closed accepts writes again.
+            if (MainWindow is MolHub.Windows.MainWindow main) main.SignOutAbandoned();
             return;
         }
 

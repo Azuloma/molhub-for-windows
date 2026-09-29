@@ -27,5 +27,6 @@
     <Compile Include="..\..\Pages\Approval\ApprovalModel.cs" Link="ApprovalModel.cs" />
     <Compile Include="..\..\Pages\Profile\ProfileModel.cs" Link="ProfileModel.cs" />
     <Compile Include="..\..\Shell\NativePage.cs" Link="NativePage.cs" />
+    <Compile Include="..\..\Pages\Common\LoadState.cs" Link="LoadState.cs" />
   </ItemGroup>
 </Project>

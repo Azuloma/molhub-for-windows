@@ -165,12 +165,13 @@ internal static class AdminUserWritePolicyTests
             && confirmDialog.Contains("member.Username", StringComparison.Ordinal) && confirmDialog.Contains("AdminUserWriteModel.NeedsWarning(action)", StringComparison.Ordinal),
             "confirmation names the account, warns where required and keeps Cancel as the default.");
         var busy = Between(view, "private void SetMemberWriteBusy", "private void ShowMemberNotice");
-        Check(new[] { "_content.IsEnabled = !busy;", "_sections.IsEnabled = !busy;", "_refresh.IsEnabled = !busy;", "_more.IsEnabled = !busy;", "_writeProgress.Visibility" }
+        Check(new[] { "_content.IsEnabled = !busy;", "_sections.IsEnabled = !busy;", "UpdateControls();", "_writeProgress.Visibility" }
                 .All(part => busy.Contains(part, StringComparison.Ordinal))
-            && main.Contains("_refresh.IsEnabled = !_memberWriteBusy; _more.IsEnabled = !_memberWriteBusy;", StringComparison.Ordinal)
+            && main.Contains("_refresh.IsEnabled = !_memberWriteBusy && !set.IsLoading;", StringComparison.Ordinal)
+            && main.Contains("_more.IsEnabled = !_memberWriteBusy && set.CanLoadMore;", StringComparison.Ordinal)
             && main.Contains("root.Children.Add(_writeProgress)", StringComparison.Ordinal),
             "a running write disables Members actions, Refresh, Load more and section switching and shows progress while keeping rows.");
-        Check(main.Contains("if (!_memberNoticeShown) _status.IsOpen = false;", StringComparison.Ordinal)
+        Check(main.Contains("if (shown && !_memberNoticeShown) _status.IsOpen = false;", StringComparison.Ordinal)
             && main.Contains("Loaded += (_, _) => ShowPendingMemberNotice();", StringComparison.Ordinal)
             && view.Contains("if (_pendingMemberNotice is not { } notice || _selected != \"Members\" || !IsLoaded) return;", StringComparison.Ordinal)
             && view.Contains("action.Click += (_, _) => _signInAgain();", StringComparison.Ordinal),

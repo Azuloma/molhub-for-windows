@@ -22,10 +22,8 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
     private readonly ListView _sections = new() { SelectionMode = ListViewSelectionMode.Single, IsItemClickEnabled = false, VerticalAlignment = VerticalAlignment.Top };
     private readonly Button _refresh;
     private readonly Button _more = new() { Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Center };
-    private readonly Dictionary<string, DateTimeOffset> _loadedAt = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> _generations = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int?> _next = new(StringComparer.Ordinal);
-    private int _activeRequestGeneration;
+    // One ticket/phase/offset state per data set (Projects and Reservations share one; the condition is unused), see LoadState.cs.
+    private readonly Dictionary<string, PagedLoadState<string>> _sets = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AdminPage<AdminRequest>> _requests = new(StringComparer.Ordinal);
     private AdminPage<AdminProject>? _projects;
     private AdminPage<AdminMember>? _members;
@@ -33,7 +31,6 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
     private AdminMaintenance? _maintenance;
     private bool _maintenanceUnavailable;
     private bool _forbidden;
-    private bool _loadFailed;
     private Announcement? _announcementDetail;
     private double _maintenanceOffset;
     private readonly Action _navigationChanged;
@@ -65,12 +62,10 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         _sections.SelectionChanged += (_, _) =>
         {
             if (_sections.SelectedItem is not ListViewItem { Tag: string section } || section == _selected) return;
-            _activeRequestGeneration++;
-            _refresh.IsEnabled = true; _more.IsEnabled = true;
             _status.IsOpen = false; _status.ActionButton = null; _memberNoticeShown = false;
-            _selected = section; _loadFailed = false; RenderSelectedSafely();
+            _selected = section; UpdateControls(); RenderSelectedSafely();
             ShowPendingMemberNotice();
-            if (!_loadedAt.TryGetValue(section, out var loaded) || DateTimeOffset.Now - loaded > StaleAfter) _ = LoadSectionAsync(section, false);
+            if (SetOf(section).NeedsLoad(DateTimeOffset.Now, StaleAfter)) _ = LoadSectionAsync(section, false);
         };
         _sections.SelectedIndex = 0;
         _more.Content = L("Projects_LoadMore");
@@ -93,7 +88,10 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
     }
 
     private string L(string key) => _p.L(key);
-    public void MarkStale() => _loadedAt.Clear();
+    public void MarkStale()
+    {
+        foreach (var set in _sets.Values) set.Invalidate();
+    }
     public void UserChanged() => MarkStale();
     public bool CanGoBack => _selected == "Maintenance" && _announcementDetail is not null;
     public bool TryGoBack()
@@ -102,8 +100,34 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         _announcementDetail = null; RenderSelectedSafely(); _content.UpdateLayout(); _scroll.UpdateLayout();
         _scroll.ChangeView(null, _maintenanceOffset, null, true); _navigationChanged(); return true;
     }
-    public Task EnsureLoadedAsync() => !_loadedAt.TryGetValue(_selected, out var loaded) || DateTimeOffset.Now - loaded > StaleAfter
+    public Task EnsureLoadedAsync() => SetOf(_selected).NeedsLoad(DateTimeOffset.Now, StaleAfter)
         ? LoadSectionAsync(_selected, false) : Task.CompletedTask;
+
+    /// <summary>The load state of a section's data set (Projects and Reservations show the same data).</summary>
+    private PagedLoadState<string> SetOf(string section)
+    {
+        var key = section == "Reservations" ? "Projects" : section;
+        if (!_sets.TryGetValue(key, out var set)) _sets[key] = set = new PagedLoadState<string>();
+        return set;
+    }
+
+    /// <summary>Whether a section shows the same data set as the selected one.</summary>
+    private bool IsShown(string section) => ReferenceEquals(SetOf(section), SetOf(_selected));
+
+    /// <summary>Refresh and Load more follow the selected data set; a running member write keeps both disabled until its reload has finished.</summary>
+    private void UpdateControls()
+    {
+        var set = SetOf(_selected);
+        _refresh.IsEnabled = !_memberWriteBusy && !set.IsLoading;
+        _more.IsEnabled = !_memberWriteBusy && set.CanLoadMore;
+    }
+
+    /// <summary>A failed read or render: the section has no data and offers Retry.</summary>
+    private void MarkFailed(string section)
+    {
+        var set = SetOf(section);
+        set.Complete(set.Begin(), success: false, DateTimeOffset.Now);
+    }
 
     private FrameworkElement SectionItem(string label, string glyph)
     {
@@ -112,16 +136,25 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         return row;
     }
 
-    /// <summary>Loads one section; true when its data was stored (a late reply for another section or load returns false).</summary>
+    /// <summary>Loads one section; true when its data was stored (a reply to an older load, or one that no longer matches the list, returns false).</summary>
     private async Task<bool> LoadSectionAsync(string section, bool append)
     {
-        var generation = _generations.GetValueOrDefault(section) + 1; _generations[section] = generation;
-        var activeGeneration = ++_activeRequestGeneration;
-        _loadFailed = false;
-        if (!HasData(section)) _content.Content = _p.LoadingIndicator("Admin_Loading");
-        _refresh.IsEnabled = false; _more.IsEnabled = false;
+        var set = SetOf(section);
+        PagedTicket<string> ticket;
+        if (append)
+        {
+            // Not accepted while any load of this data set runs or there is no next page: the list and the button stay as they are.
+            if (set.BeginMore() is not { } more) return false;
+            ticket = more;
+        }
+        else
+        {
+            ticket = set.BeginFirst(string.Empty);
+        }
+        if (IsShown(section) && !HasData(section)) _content.Content = _p.LoadingIndicator("Admin_Loading");
+        UpdateControls();
         var command = AdministrationModel.Command(section);
-        var payload = AdministrationModel.IsPaged(section) ? AdministrationModel.ListPayload(section, append ? _next.GetValueOrDefault(section) ?? 0 : 0) : null;
+        var payload = AdministrationModel.IsPaged(section) ? AdministrationModel.ListPayload(section, ticket.Offset) : null;
         BridgeResult? result;
         try
         {
@@ -132,19 +165,20 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
             LogFailure("request", section, ex);
             result = null;
         }
-        if (_generations.GetValueOrDefault(section) != generation || _activeRequestGeneration != activeGeneration || _selected != section) return false;
-        // A running member write keeps Refresh and Load more disabled until its own reload has finished.
-        _refresh.IsEnabled = !_memberWriteBusy; _more.IsEnabled = !_memberWriteBusy;
+        // A newer load of this data set (refresh, Load more, another switch back to it) owns the data and the buttons now.
+        if (!(append ? set.AcceptMore(ticket) : set.AcceptFirst(ticket))) return false;
+        // The reply belongs to the set; it is shown and reported only while that set is the selected one.
+        var shown = IsShown(section);
         if (result is null)
         {
-            _loadFailed = true;
-            ShowErrorFor(null);
-            RenderSelectedSafely();
+            set.FailPage(ticket, DateTimeOffset.Now);
+            UpdateControls();
+            if (shown) { ShowErrorFor(null); RenderSelectedSafely(); }
             return false;
         }
         if (!result.Ok)
         {
-            _loadFailed = true;
+            var setupRequired = false;
             var forbidden = result.Status == 403 || result.ErrorCode is "FORBIDDEN" or "ADMIN_REQUIRED";
             if (forbidden)
             {
@@ -152,12 +186,17 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
             }
             else if (section == "Maintenance" && result.Status == 503 && result.ErrorCode == "MAINTENANCE_SETUP_REQUIRED")
             {
-                _loadFailed = false;
-                _maintenance = new AdminMaintenance(false, null, []); _maintenanceUnavailable = true; _loadedAt[section] = DateTimeOffset.Now; _status.IsOpen = false;
+                setupRequired = true;
+                _maintenance = new AdminMaintenance(false, null, []); _maintenanceUnavailable = true; set.CompletePage(ticket, null, DateTimeOffset.Now); if (shown) _status.IsOpen = false;
             }
-            else ShowErrorFor(result);
-            if (section == _selected) RenderSelectedSafely();
-            return !_loadFailed;
+            else
+            {
+                set.FailPage(ticket, DateTimeOffset.Now);
+                if (shown) ShowErrorFor(result);
+            }
+            UpdateControls();
+            if (shown) RenderSelectedSafely();
+            return setupRequired;
         }
         _forbidden = false;
         bool valid;
@@ -182,41 +221,50 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         if (!valid)
         {
             ClearSectionData(section);
-            _loadFailed = true;
-            ShowErrorFor(null);
-            if (section == _selected) RenderSelectedSafely();
+            MarkFailed(section);
+            UpdateControls();
+            if (shown) { ShowErrorFor(null); RenderSelectedSafely(); }
             return false;
         }
-        _loadFailed = false;
-        _loadedAt[section] = DateTimeOffset.Now;
-        if (section is "Projects" or "Reservations") _loadedAt[section == "Projects" ? "Reservations" : "Projects"] = _loadedAt[section];
+        set.CompletePage(ticket, StoredNext(section), DateTimeOffset.Now);
+        UpdateControls();
         // A member write's result stays visible until dismissed; a successful reload only clears earlier load errors.
-        if (!_memberNoticeShown) _status.IsOpen = false;
+        if (shown && !_memberNoticeShown) _status.IsOpen = false;
         if (section == "Maintenance") _maintenanceUnavailable = false;
-        if (section == _selected) RenderSelectedSafely();
+        if (shown) RenderSelectedSafely();
         return true;
     }
+
+    /// <summary>The next offset of the page just stored for a section (null at the end, and for the sections that are not paged).</summary>
+    private int? StoredNext(string section) => section switch
+    {
+        "Requests" => _requests.TryGetValue(section, out var requests) ? requests.NextOffset : null,
+        "Projects" or "Reservations" => _projects?.NextOffset,
+        "Members" => _members?.NextOffset,
+        "Audit" => _audit?.NextOffset,
+        _ => null
+    };
 
     private bool StorePaged(string section, AdminPage<AdminRequest>? page, bool append)
     {
         if (page is null) return false;
         IReadOnlyList<AdminRequest> old = append && _requests.TryGetValue(section, out var prior) ? prior.Items : Array.Empty<AdminRequest>();
         _requests[section] = page with { Items = old.Concat(page.Items).DistinctBy(x => x.Id).ToList() };
-        _next[section] = page.NextOffset; return true;
+        return true;
     }
     private bool StoreProjects(AdminPage<AdminProject>? page, bool append)
     {
         if (page is null) return false;
         IReadOnlyList<AdminProject> old = append ? _projects?.Items ?? Array.Empty<AdminProject>() : Array.Empty<AdminProject>();
         _projects = page with { Items = old.Concat(page.Items).DistinctBy(x => x.Id).ToList() };
-        _next["Projects"] = page.NextOffset; _next["Reservations"] = page.NextOffset; return true;
+        return true;
     }
     private bool StoreMembers(AdminPage<AdminMember>? page, bool append)
     {
         if (page is null) return false;
         IReadOnlyList<AdminMember> old = append ? _members?.Items ?? Array.Empty<AdminMember>() : Array.Empty<AdminMember>();
         _members = page with { Items = old.Concat(page.Items).DistinctBy(x => x.Id).ToList() };
-        _next["Members"] = page.NextOffset; return true;
+        return true;
     }
     private bool StoreDiscord(AdminDiscordData? data)
     {
@@ -233,7 +281,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         if (page is null) return false;
         IReadOnlyList<AdminAudit> old = append ? _audit?.Items ?? Array.Empty<AdminAudit>() : Array.Empty<AdminAudit>();
         _audit = page with { Items = old.Concat(page.Items).ToList() };
-        _next["Audit"] = page.NextOffset; return true;
+        return true;
     }
     private bool HasData(string section) => section switch
     {
@@ -243,7 +291,8 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
     private void ClearAllData()
     {
         _requests.Clear(); _projects = null; _members = null; _discord = null; _maintenance = null; _audit = null;
-        _loadedAt.Clear(); _next.Clear(); _maintenanceUnavailable = false; _announcementDetail = null;
+        foreach (var set in _sets.Values) set.Reset();
+        _maintenanceUnavailable = false; _announcementDetail = null;
     }
 
     private void ClearSectionData(string section)
@@ -252,14 +301,13 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         {
             case "Requests": _requests.Remove(section); break;
             case "Projects":
-            case "Reservations": _projects = null; _loadedAt.Remove("Projects"); _loadedAt.Remove("Reservations"); _next.Remove("Projects"); _next.Remove("Reservations"); break;
+            case "Reservations": _projects = null; break;
             case "Members": _members = null; break;
             case "Discord": _discord = null; break;
             case "Maintenance": _maintenance = null; _maintenanceUnavailable = false; _announcementDetail = null; break;
             case "Audit": _audit = null; break;
         }
-        _loadedAt.Remove(section);
-        _next.Remove(section);
+        SetOf(section).Reset();
     }
 
     private void ShowErrorFor(BridgeResult? result)
@@ -296,7 +344,8 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         {
             LogFailure("render", _selected, ex);
             ClearSectionData(_selected);
-            _loadFailed = true;
+            MarkFailed(_selected);
+            UpdateControls();
             ShowErrorFor(null);
             try { RenderErrorMessage(); }
             catch { _content.Content = null; _more.Visibility = Visibility.Collapsed; }
@@ -324,7 +373,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
         }
         if (!HasData(_selected))
         {
-            if (_loadFailed) RenderErrorMessage();
+            if (SetOf(_selected).Phase == LoadPhase.Retryable) RenderErrorMessage();
             else _content.Content = _p.LoadingIndicator("Admin_Loading");
             return;
         }
@@ -334,7 +383,7 @@ internal sealed partial class AdministrationView : UserControl, IScreenStack
             "Discord" => RenderDiscord(), "Maintenance" => RenderMaintenance(), "Audit" => RenderAudit(), _ => new StackPanel()
         };
         _content.Content = body;
-        _more.Visibility = AdministrationModel.IsPaged(_selected) && _next.GetValueOrDefault(_selected) is not null ? Visibility.Visible : Visibility.Collapsed;
+        _more.Visibility = AdministrationModel.IsPaged(_selected) && SetOf(_selected).NextOffset is not null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void RenderErrorMessage()

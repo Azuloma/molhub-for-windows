@@ -350,6 +350,8 @@
   <data name="Work_Sending"><value>送信中…</value></data>
   <data name="Work_BusyTitle"><value>別の変更を送信中です</value></data>
   <data name="Work_Busy"><value>完了してからもう一度お試しください。</value></data>
+  <data name="Work_SigningOutTitle"><value>サインアウト中</value></data>
+  <data name="Work_SigningOut"><value>サインアウト中は変更を送信できません。</value></data>
   <data name="Profile_Loading"><value>プロフィールを読み込んでいます…</value></data>
   <data name="Profile_ErrorSession"><value>プロフィールを読み込むには再度サインインしてください。</value></data>
   <data name="Profile_ErrorUnexpectedTitle"><value>プロフィールを読み込めませんでした</value></data>

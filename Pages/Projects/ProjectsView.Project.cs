@@ -35,19 +35,21 @@ internal sealed partial class ProjectsView
     /// <summary>Loads the project; returns false only when this load failed (a newer load of the same screen counts as refreshed).</summary>
     private async Task<bool> ReloadProjectAsync(Screen screen)
     {
-        // This reload shows the current state, so a pending "changed elsewhere" mark is settled (a write on this page
-        // reloads right after marking every page stale; it must not reload again and close its own notice).
-        screen.WorkStale = false;
-        var generation = ++screen.LoadGeneration;
+        // The ticket is taken now, so this reload counts as fresh unless another write invalidates the screen before the
+        // answer (a write on this page invalidates every page first and reloads right after; it must not reload again and
+        // close its own notice).
+        var ticket = screen.State.Begin();
         var result = await _request("project", ProjectsModel.ProjectPayload(screen.Id));
         // A newer load of the same screen is responsible for what is shown (and for its own error).
-        if (generation != screen.LoadGeneration) return true;
+        if (!screen.State.IsCurrent(ticket)) return true;
         var detail = result.Ok && result.Data is { } data ? ProjectsModel.ParseProjectDetail(data) : null;
         if (detail is null)
         {
+            screen.State.Complete(ticket, success: false, DateTimeOffset.Now);
             ShowError(screen, result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result), () => LoadProjectAsync(screen));
             return false;
         }
+        screen.State.Complete(ticket, success: true, DateTimeOffset.Now);
         screen.Title = detail.Project.Name;
         if (Current == screen) UpdateBreadcrumb();
         var (content, layout) = BuildProjectContent(screen, detail);
@@ -299,9 +301,10 @@ internal sealed partial class ProjectsView
     {
         var filter = CommitFilter.None;
         var commits = new List<ProjectCommit>();
-        int? next = null;
         var total = 0;
-        var loading = false;
+        // Ticket, list generation, filter and next offset of this timeline (see LoadState.cs).
+        var state = new PagedLoadState<CommitFilter>();
+        screen.Timeline = state;
 
         var root = new StackPanel { Spacing = 12 };
         ComboBox? projectFilter = null;
@@ -367,35 +370,46 @@ internal sealed partial class ProjectsView
 
         async Task LoadAsync(bool append)
         {
-            if (loading && append) return;
-            loading = true;
-            more.IsEnabled = false;
-            var requested = filter;
-            if (!append)
+            PagedTicket<CommitFilter> ticket;
+            if (append)
             {
+                // Not accepted while any load of the list runs or there is no next page: the list and the button stay as they are.
+                if (state.BeginMore() is not { } moreTicket) return;
+                ticket = moreTicket;
+            }
+            else
+            {
+                ticket = state.BeginFirst(filter);
                 onReload?.Invoke();
                 timeline.Children.Clear();
                 timeline.Children.Add(_p.LoadingIndicator("Projects_Loading"));
             }
-            var result = await _request(command, payload(requested, append ? next ?? 0 : 0));
-            loading = false;
-            more.IsEnabled = true;
-            if (requested != filter) return;
+            UpdateMore();
+            var result = await _request(command, payload(ticket.Condition, ticket.Offset));
+            // A newer refresh, filter change or Load more (or a changed list) owns the list and its button now.
+            if (!(append ? state.AcceptMore(ticket) : state.AcceptFirst(ticket))) return;
             var page = result.Ok ? parse(result) : null;
             if (page is null)
             {
+                state.FailPage(ticket, DateTimeOffset.Now);
+                UpdateMore();
                 if (!append) timeline.Children.Clear();
                 ShowError(screen, result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result), () => LoadAsync(append));
                 return;
             }
             if (!append) commits.Clear();
             commits.AddRange(page.Commits.Where(commit => commits.All(existing => existing.Id != commit.Id)));
-            next = page.NextOffset;
+            state.CompletePage(ticket, page.NextOffset, DateTimeOffset.Now);
             total = page.Total;
-            screen.LoadedAt = DateTimeOffset.Now;
             if (Current == screen) CloseStatusBar();
             onPage?.Invoke(page);
             Render();
+        }
+
+        void UpdateMore()
+        {
+            more.Visibility = state.NextOffset is null ? Visibility.Collapsed : Visibility.Visible;
+            more.IsEnabled = state.CanLoadMore;
         }
 
         void Render()
@@ -423,7 +437,7 @@ internal sealed partial class ProjectsView
                 timeline.Children.Add(section);
             }
             if (commits.Count > 0) timeline.Children.Add(_p.StorageNote());
-            more.Visibility = next is null ? Visibility.Collapsed : Visibility.Visible;
+            UpdateMore();
         }
 
         void Apply()
@@ -432,7 +446,6 @@ internal sealed partial class ProjectsView
             var updated = new CommitFilter(ProjectsModel.NormalizeQuery(search.Text), ProjectsModel.DayOptions[Math.Max(0, days.SelectedIndex)], latestOnly.IsChecked == true, project);
             if (updated == filter && commits.Count > 0) return;
             filter = updated;
-            next = null;
             _ = LoadAsync(append: false);
         }
 
@@ -450,11 +463,7 @@ internal sealed partial class ProjectsView
         };
         more.Click += async (_, _) => await LoadAsync(append: true);
         clear.Visibility = Visibility.Collapsed;
-        reload = () =>
-        {
-            next = null;
-            return LoadAsync(append: false);
-        };
+        reload = () => LoadAsync(append: false);
         _ = LoadAsync(append: false);
         return root;
     }
@@ -505,13 +514,18 @@ internal sealed partial class ProjectsView
 
     private async Task LoadCommitAsync(Screen screen)
     {
+        var ticket = screen.State.Begin();
         var result = await _request("commit", ProjectsModel.CommitPayload(screen.Id));
+        // A newer load of the same screen (Retry pressed twice) owns what is shown.
+        if (!screen.State.IsCurrent(ticket)) return;
         var detail = result.Ok && result.Data is { } data ? ProjectsModel.ParseCommitDetail(data) : null;
         if (detail is null)
         {
+            screen.State.Complete(ticket, success: false, DateTimeOffset.Now);
             ShowError(screen, result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result), () => LoadCommitAsync(screen));
             return;
         }
+        screen.State.Complete(ticket, success: true, DateTimeOffset.Now);
         screen.Title = ProjectsModel.VersionLabel(detail.Commit.Version, detail.Commit.Id);
         if (Current == screen) UpdateBreadcrumb();
         var (content, layout) = BuildCommitContent(detail);

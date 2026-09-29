@@ -40,10 +40,8 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
     // A failed state read keeps its message until a later state read succeeds (the card stays hidden meanwhile).
     private MaintenanceError? _stateError;
     private double _listOffset;
-    private int? _next;
-    private DateTimeOffset _loadedAt;
-    private bool _loaded;
-    private int _generation;
+    // Ticket, phase, list generation and next offset of the announcements (see LoadState.cs); the condition is unused.
+    private readonly PagedLoadState<string> _paging = new();
 
     public MaintenanceView(Func<string, string> localize, string language, Func<string, JsonObject?, Task<BridgeResult>> request,
         Func<AuthenticatedUser> user, Action signInAgain, Action navigationChanged)
@@ -82,8 +80,8 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
     /// <summary>Loads on first display and again when the page is older than a minute.</summary>
     public Task EnsureLoadedAsync()
     {
-        if (_detail is null) _body.Content = _loaded ? _list : _p.LoadingIndicator("Maintenance_Loading");
-        return !_loaded || DateTimeOffset.Now - _loadedAt > StaleAfter ? LoadAsync(append: false) : Task.CompletedTask;
+        if (_detail is null) _body.Content = _paging.HasContent ? _list : _p.LoadingIndicator("Maintenance_Loading");
+        return _paging.NeedsLoad(DateTimeOffset.Now, StaleAfter) ? LoadAsync(append: false) : Task.CompletedTask;
     }
 
     /// <summary>Returns from an announcement's details to the list (title-bar Back, Alt+Left or the Back button).</summary>
@@ -91,13 +89,13 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
     {
         if (_detail is null) return false;
         _detail = null;
-        _body.Content = _loaded ? _list : _p.LoadingIndicator("Maintenance_Loading");
+        _body.Content = _paging.HasContent ? _list : _p.LoadingIndicator("Maintenance_Loading");
         var offset = _listOffset;
         _body.UpdateLayout();
         _scroll.ChangeView(null, offset, null, true);
         _navigationChanged();
         if (_stateError is { } stateError) ShowError(stateError);
-        if (!_loaded) _ = LoadAsync(append: false);
+        if (!_paging.HasContent && !_paging.IsLoading) _ = LoadAsync(append: false);
         return true;
     }
 
@@ -114,15 +112,25 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
     /// <summary>A full load reads the state and the first announcement page together; "Load more" reads the next page only.</summary>
     private async Task LoadAsync(bool append)
     {
-        var generation = ++_generation;
+        PagedTicket<string> ticket;
+        if (append)
+        {
+            // Not accepted while any load of the list runs or there is no next page: the list and the button stay as they are.
+            if (_paging.BeginMore() is not { } more) return;
+            ticket = more;
+        }
+        else
+        {
+            ticket = _paging.BeginFirst(string.Empty);
+        }
         _refresh.IsEnabled = false;
         _loadMore.IsEnabled = false;
         var stateTask = append ? null : _request("maintenance", null);
-        var listResult = await _request("announcements", MaintenanceModel.ListPayload(append ? _next ?? 0 : 0));
+        var listResult = await _request("announcements", MaintenanceModel.ListPayload(ticket.Offset));
         var stateResult = stateTask is null ? null : await stateTask;
-        if (generation != _generation) return;
+        // A newer refresh or Load more owns the list and its buttons now.
+        if (!(append ? _paging.AcceptMore(ticket) : _paging.AcceptFirst(ticket))) return;
         _refresh.IsEnabled = true;
-        _loadMore.IsEnabled = true;
 
         var page = listResult.Ok && listResult.Data is { } data ? MaintenanceModel.ParseList(data, listResult.Meta) : null;
         MaintenanceState? state = null;
@@ -137,10 +145,12 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
         if (page is null)
         {
             var error = listResult.Ok ? MaintenanceError.Unexpected : MaintenanceModel.ErrorFor(listResult);
+            _paging.FailPage(ticket, DateTimeOffset.Now);
+            UpdateLoadMore();
             if (_detail is null)
             {
                 ShowError(error);
-                if (!_loaded)
+                if (!_paging.HasContent)
                 {
                     // Keep whatever state did load. Rejected and suspended accounts may read the state but not the
                     // announcements, so that section is hidden for them instead of offering a retry that cannot work.
@@ -167,9 +177,7 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
         {
             if (!_items.Any(existing => existing.Id == item.Id)) _items.Add(item);
         }
-        _next = page.NextOffset;
-        _loaded = true;
-        _loadedAt = DateTimeOffset.Now;
+        _paging.CompletePage(ticket, page.NextOffset, DateTimeOffset.Now);
         RenderRows();
         if (_detail is null) _body.Content = _list;
     }
@@ -179,7 +187,13 @@ internal sealed class MaintenanceView : UserControl, IScreenStack
         _rows.Children.Clear();
         if (_items.Count == 0) _rows.Children.Add(_p.Secondary(L("Announcements_None")));
         foreach (var item in _items) _rows.Children.Add(AnnouncementCard.Row(item, L, _language, () => OpenDetail(item)));
-        _loadMore.Visibility = _next is not null ? Visibility.Visible : Visibility.Collapsed;
+        UpdateLoadMore();
+    }
+
+    private void UpdateLoadMore()
+    {
+        _loadMore.Visibility = _paging.NextOffset is not null ? Visibility.Visible : Visibility.Collapsed;
+        _loadMore.IsEnabled = _paging.CanLoadMore;
     }
 
     private void ShowError(MaintenanceError error)

@@ -9,5 +9,7 @@ artifacts/
 .vs/
 BundleArtifacts/
 /.claude/rules/
+/.claude/agents/
+/.claude/specs/
 /CLAUDE.md
 /.claude/WORK_PLAN.md

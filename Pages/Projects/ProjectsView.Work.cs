@@ -27,12 +27,18 @@ internal sealed partial class ProjectsView
         PushPublish(projectId, name);
     }
 
-    /// <summary>Makes the first screen and any open project reload when shown again (a write elsewhere changed reservations).</summary>
+    /// <summary>
+    /// Makes the first screen and any open project reload when shown again (a write elsewhere changed reservations): every
+    /// load state is invalidated, so an answer to a load that started before is shown but never counts as fresh.
+    /// </summary>
     public void MarkStale()
     {
-        _listLoadedAt = default;
-        if (_stack.Count > 0) _stack[0].LoadedAt = default;
-        foreach (var screen in _stack.Where(s => s.Kind == ScreenKind.Project)) screen.WorkStale = true;
+        _list.Invalidate();
+        foreach (var screen in _stack)
+        {
+            screen.State.Invalidate();
+            screen.Timeline?.Invalidate();
+        }
     }
 
     /// <summary>The actions under the reservation state: Start work when free; Publish version and Cancel work when it is yours.</summary>
@@ -88,7 +94,7 @@ internal sealed partial class ProjectsView
             var publish = ActionButton(L("Work_PublishShort"), PublishGlyph, accent: true);
             publish.Click += (_, _) =>
             {
-                if (_gate.InFlight) ShowBusyNotice();
+                if (_gate.IsBusy) ShowBusyNotice();
                 else PushPublish(project.Id, project.Name);
             };
             var cancel = ActionButton(L("Work_Cancel"), CancelGlyph, accent: false);
@@ -167,7 +173,7 @@ internal sealed partial class ProjectsView
     }
 
     private void ShowBusyNotice(Screen? screen = null) =>
-        ShowWriteNotice(screen ?? Current, InfoBarSeverity.Informational, L("Work_BusyTitle"), L("Work_Busy"));
+        ShowWriteNotice(screen ?? Current, InfoBarSeverity.Informational, L(_gate.RefusedTitleKey), L(_gate.RefusedMessageKey));
 
     /// <summary>
     /// A write result on the InfoBar of whatever screen is shown now (the user may have moved on meanwhile); when this page
@@ -234,13 +240,18 @@ internal sealed partial class ProjectsView
     /// <summary>Reads the project fresh, so the form always publishes against the current reservation base.</summary>
     private async Task LoadPublishAsync(Screen screen, string name)
     {
+        var ticket = screen.State.Begin();
         var result = await _request("project", ProjectsModel.ProjectPayload(screen.Id));
+        // A newer load of the same screen (Retry pressed twice) owns what is shown.
+        if (!screen.State.IsCurrent(ticket)) return;
         var detail = result.Ok && result.Data is { } data ? ProjectsModel.ParseProjectDetail(data) : null;
         if (detail is null)
         {
+            screen.State.Complete(ticket, success: false, DateTimeOffset.Now);
             ShowError(screen, result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result), () => LoadPublishAsync(screen, name));
             return;
         }
+        screen.State.Complete(ticket, success: true, DateTimeOffset.Now);
         SetContent(screen, WorkModel.StillReservedBy(detail.Project, _user.Username) ? BuildPublishForm(screen, detail) : NeedsReservation(detail.Project), null);
     }
 
@@ -334,7 +345,7 @@ internal sealed partial class ProjectsView
 
         publish.Click += async (_, _) =>
         {
-            if (_gate.InFlight)
+            if (_gate.IsBusy)
             {
                 ShowBusyNotice(screen);
                 return;

@@ -29,7 +29,7 @@ internal static class AdministrationPolicyTests
         var directRender = safeBlock.IndexOf("RenderSelected();", StringComparison.Ordinal);
         var renderCatch = safeBlock.IndexOf("catch (Exception ex)", StringComparison.Ordinal);
         Check(directRenders == 1 && directRender >= 0 && renderCatch > directRender
-            && safeBlock.IndexOf("_loadFailed = true;", renderCatch, StringComparison.Ordinal) > renderCatch
+            && safeBlock.IndexOf("MarkFailed(_selected);", renderCatch, StringComparison.Ordinal) > renderCatch
             && safeBlock.IndexOf("RenderErrorMessage();", renderCatch, StringComparison.Ordinal) > renderCatch,
             "section rendering must go through RenderSelectedSafely so a render exception cannot escape a selection handler or leave the loading indicator.");
         var logStart = view.IndexOf("private static void LogFailure(", StringComparison.Ordinal);
@@ -116,10 +116,10 @@ internal static class AdministrationPolicyTests
         var malformedStart = view.IndexOf("if (!valid)", loadStart, StringComparison.Ordinal);
         var failureBlock = loadStart >= 0 && malformedStart > loadStart ? view[loadStart..malformedStart] : "";
         Check(failureBlock.Contains("ShowErrorFor(result)", StringComparison.Ordinal)
-            && failureBlock.Contains("if (section == _selected) RenderSelectedSafely();", StringComparison.Ordinal)
-            && view.Contains("private bool _loadFailed;", StringComparison.Ordinal)
-            && view.Contains("_loadFailed = true;", StringComparison.Ordinal)
-            && view.Contains("if (_loadFailed) RenderErrorMessage();", StringComparison.Ordinal)
+            && failureBlock.Contains("if (shown) RenderSelectedSafely();", StringComparison.Ordinal)
+            && failureBlock.Contains("set.FailPage(ticket, DateTimeOffset.Now);", StringComparison.Ordinal)
+            && view.Contains("MarkFailed(section);", StringComparison.Ordinal)
+            && view.Contains("if (SetOf(_selected).Phase == LoadPhase.Retryable) RenderErrorMessage();", StringComparison.Ordinal)
             && view.Contains("_content.Content = _p.Secondary(_status.Message);", StringComparison.Ordinal),
             "first-load failures must settle on a localized section message while later failures continue rendering cached data.");
         var selectionStart = view.IndexOf("_sections.SelectionChanged +=", StringComparison.Ordinal);
@@ -128,10 +128,10 @@ internal static class AdministrationPolicyTests
         Check(selectionBlock.Contains("_status.IsOpen = false;", StringComparison.Ordinal)
             && selectionBlock.Contains("_status.ActionButton = null;", StringComparison.Ordinal)
             && selectionBlock.IndexOf("_status.IsOpen = false;", StringComparison.Ordinal) < selectionBlock.IndexOf("RenderSelectedSafely();", StringComparison.Ordinal)
-            && selectionBlock.Contains("_activeRequestGeneration++;", StringComparison.Ordinal)
-            && view.Contains("_activeRequestGeneration != activeGeneration", StringComparison.Ordinal)
-            && view.Contains("_selected != section", StringComparison.Ordinal),
-            "switching sections must clear the prior InfoBar before rendering and stale replies must remain ignored.");
+            && view.Contains("if (!(append ? set.AcceptMore(ticket) : set.AcceptFirst(ticket))) return false;", StringComparison.Ordinal)
+            && view.Contains("var shown = IsShown(section);", StringComparison.Ordinal)
+            && !view.Contains("_activeRequestGeneration", StringComparison.Ordinal),
+            "switching sections must clear the prior InfoBar before rendering, and replies to an older load (or for a set that is not shown) must not be shown or reported.");
         Check(projectsView.Contains("project.ReservationPresent ?", StringComparison.Ordinal)
             && projectsView.Contains("project.Holder ?? \"\u2014\"", StringComparison.Ordinal)
             && reservationsView.Contains("project.Holder ?? \"\u2014\"", StringComparison.Ordinal),
@@ -150,7 +150,7 @@ internal static class AdministrationPolicyTests
             .Concat(new[] { "approved", "rejected", "suspended", "force_release", "reset_code_issued", "password_reset", "project_created", "admin_created", "admin_recovered", "project_deleted", "project_restored", "auth_smoke_test", "discord_linked", "discord_disabled", "discord_retry", "discord_commands_registered", "discord_commands_migrated" }.Select(action => "Admin_Audit_" + action))
             .Concat(new[] { "pending", "sending", "sent", "failed", "cancelled" }.Select(status => "Admin_Discord_Status_" + status));
         foreach (var key in requiredKeys) Check(localizedAdminKeys["en-US"].Contains(key), $"both locales must define {key}.");
-        Check(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.12</Version>", StringComparison.Ordinal)
-            && File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.12.0\"", StringComparison.Ordinal), "release version must be v0.14.12.");
+        Check(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.13</Version>", StringComparison.Ordinal)
+            && File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.13.0\"", StringComparison.Ordinal), "release version must be v0.14.13.");
     }
 }

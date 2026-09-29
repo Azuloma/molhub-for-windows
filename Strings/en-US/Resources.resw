@@ -350,6 +350,8 @@
   <data name="Work_Sending"><value>Sending…</value></data>
   <data name="Work_BusyTitle"><value>Another change is being sent</value></data>
   <data name="Work_Busy"><value>Wait until it finishes, then try again.</value></data>
+  <data name="Work_SigningOutTitle"><value>Signing out</value></data>
+  <data name="Work_SigningOut"><value>Changes can't be sent while you are being signed out.</value></data>
   <data name="Profile_Loading"><value>Loading your profile…</value></data>
   <data name="Profile_ErrorSession"><value>Sign in again to load your profile.</value></data>
   <data name="Profile_ErrorUnexpectedTitle"><value>Your profile couldn&apos;t be loaded</value></data>
