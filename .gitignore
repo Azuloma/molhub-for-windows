@@ -2,6 +2,7 @@ bin/
 obj/
 TestResults/
 artifacts/
+AppPackages/
 *.user
 *.suo
 *.pfx

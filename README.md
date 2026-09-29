@@ -47,7 +47,11 @@ dotnet build MolHub.Windows.csproj -p:Platform=x64 -p:Configuration=Debug
 
 ## Install a development build
 
-Use Windows PowerShell 5.1 or later. First enable **Settings > System > For developers > Developer Mode**. Then check and install the package you built:
+Use Windows PowerShell 5.1 or later. First enable **Settings > System > For developers > Developer Mode**, and on the same page turn on the PowerShell setting that allows unsigned local scripts to run.
+
+If you downloaded the source as a ZIP file, unblock the ZIP **before extracting it** (right-click the ZIP > **Properties** > check **Unblock** > **OK**, or run `Unblock-File <path-to-zip>`). Windows marks downloaded files as coming from the internet, and the extracted files inherit that mark; the unsigned-local-scripts setting does not cover marked files, so `Install-Prototype.ps1` would be refused as "not digitally signed". If you already extracted it, run `Get-ChildItem -Recurse | Unblock-File` in the extracted folder instead.
+
+Then build the package (see [Build and test](#build-and-test); a downloaded source has no `AppPackages` folder until you build), check it, and install it:
 
 ```powershell
 .\Install-Prototype.ps1 -WhatIf -PackageDirectory ".\AppPackages\MolHub.Windows_0.14.19.0_x64_Debug_Test"
