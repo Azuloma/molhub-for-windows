@@ -1,8 +1,8 @@
 bin/
 obj/
+AppPackages/
 TestResults/
 artifacts/
-AppPackages/
 *.user
 *.suo
 *.pfx
