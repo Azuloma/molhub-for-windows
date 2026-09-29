@@ -4,7 +4,7 @@
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>MolHub.Windows</RootNamespace>
-    <Version>0.14.14</Version>
+    <Version>0.14.15</Version>
     <Product>MolHub for Windows</Product>
     <AssemblyTitle>MolHub for Windows</AssemblyTitle>
     <ApplicationIcon>Assets\AppIconOnDark.ico</ApplicationIcon>

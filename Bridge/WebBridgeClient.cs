@@ -26,7 +26,9 @@ internal sealed class WebBridgeClient : IDisposable
     private IntPtr _hostWindow;
     private CoreWebView2Controller? _controller;
     private CoreWebView2? _core;
-    private int _coreGeneration;
+    private global::Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2NavigationCompletedEventArgs>? _navigationCompleted;
+    private global::Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2WebMessageReceivedEventArgs>? _webMessageReceived;
+    private global::Windows.Foundation.TypedEventHandler<CoreWebView2, CoreWebView2ProcessFailedEventArgs>? _processFailed;
     private string _startStage = "window";
     private bool _disposed;
 
@@ -106,7 +108,6 @@ internal sealed class WebBridgeClient : IDisposable
             }
             _startStage = "settings";
             _controller = controller;
-            _coreGeneration = generation;
             _controller.IsVisible = false;
 
             _core = _controller.CoreWebView2;
@@ -122,12 +123,17 @@ internal sealed class WebBridgeClient : IDisposable
 
             _core.NavigationStarting += Core_NavigationStarting;
             _core.FrameNavigationStarting += Core_FrameNavigationStarting;
-            _core.NavigationCompleted += Core_NavigationCompleted;
+            // The stateful handlers capture this attempt's generation; senders are never compared by reference
+            // (the projection does not guarantee the same wrapper object). Teardown unsubscribes exactly these delegates.
+            _navigationCompleted = (_, e) => HandleNavigationCompleted(generation, e);
+            _webMessageReceived = (_, e) => HandleWebMessage(generation, e);
+            _processFailed = (_, e) => Fail(generation, $"process {e.ProcessFailedKind}");
+            _core.NavigationCompleted += _navigationCompleted;
             _core.NewWindowRequested += Core_NewWindowRequested;
             _core.PermissionRequested += Core_PermissionRequested;
             _core.DownloadStarting += Core_DownloadStarting;
-            _core.WebMessageReceived += Core_WebMessageReceived;
-            _core.ProcessFailed += Core_ProcessFailed;
+            _core.WebMessageReceived += _webMessageReceived;
+            _core.ProcessFailed += _processFailed;
             _startStage = "navigate";
             _core.Navigate(BridgePolicy.BridgeUri.AbsoluteUri);
         }
@@ -173,17 +179,15 @@ internal sealed class WebBridgeClient : IDisposable
 
     private void Core_NavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
     {
-        if (!ReferenceEquals(sender, _core)) { e.Cancel = true; return; }
         if (BridgePolicy.IsBridgeDocument(TryParseUri(e.Uri))) return;
         e.Cancel = true;
     }
 
     private static void Core_FrameNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e) => e.Cancel = true;
 
-    private void Core_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    private void HandleNavigationCompleted(int generation, CoreWebView2NavigationCompletedEventArgs e)
     {
-        if (!ReferenceEquals(sender, _core) || _disposed || State != BridgeConnectionState.Connecting) return;
-        var generation = _coreGeneration;
+        if (_disposed || !_startup.IsCurrent(generation) || State != BridgeConnectionState.Connecting) return;
         if (e.IsSuccess && BridgePolicy.IsBridgeDocument(TryParseUri(_core?.Source)))
         {
             if (_startup.Succeed(generation)) SetState(BridgeConnectionState.Connected);
@@ -204,9 +208,9 @@ internal sealed class WebBridgeClient : IDisposable
 
     private static void Core_DownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e) => e.Cancel = true;
 
-    private void Core_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    private void HandleWebMessage(int generation, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (!ReferenceEquals(sender, _core)) return;
+        if (!_startup.IsLive(generation)) return;
         if (!BridgePolicy.IsTrustedSource(e.Source)) return;
         string json;
         try { json = e.WebMessageAsJson; }
@@ -214,12 +218,6 @@ internal sealed class WebBridgeClient : IDisposable
         var result = BridgePolicy.ParseResult(json);
         if (result is null || !_pending.Remove(result.RequestId, out var completion)) return;
         completion.TrySetResult(result);
-    }
-
-    private void Core_ProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
-    {
-        if (!ReferenceEquals(sender, _core)) return;
-        Fail(_coreGeneration, $"process {e.ProcessFailedKind}");
     }
 
     /// <summary>Fails the live generation (only if it still applies) and tears the connection down.</summary>
@@ -275,13 +273,16 @@ internal sealed class WebBridgeClient : IDisposable
         {
             core.NavigationStarting -= Core_NavigationStarting;
             core.FrameNavigationStarting -= Core_FrameNavigationStarting;
-            core.NavigationCompleted -= Core_NavigationCompleted;
+            if (_navigationCompleted is { } navigationCompleted) core.NavigationCompleted -= navigationCompleted;
             core.NewWindowRequested -= Core_NewWindowRequested;
             core.PermissionRequested -= Core_PermissionRequested;
             core.DownloadStarting -= Core_DownloadStarting;
-            core.WebMessageReceived -= Core_WebMessageReceived;
-            core.ProcessFailed -= Core_ProcessFailed;
+            if (_webMessageReceived is { } webMessageReceived) core.WebMessageReceived -= webMessageReceived;
+            if (_processFailed is { } processFailed) core.ProcessFailed -= processFailed;
         }
+        _navigationCompleted = null;
+        _webMessageReceived = null;
+        _processFailed = null;
         var controller = _controller;
         _core = null;
         _controller = null;

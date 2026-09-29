@@ -185,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.14</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.14.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.14.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.14.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.15</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.15.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.15.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.15.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.14", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.14", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.14", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.13", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.14 above v0.14.13 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.15", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.15", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.15", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.14", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.15 above v0.14.14 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -328,7 +328,7 @@ Assert(bridgeStart.Contains("_startup.Request()", StringComparison.Ordinal)
     && mainCode.Contains("_bridge.StateChanged += Bridge_StateChanged;", StringComparison.Ordinal)
     && mainCode.Contains("_bridge.StateChanged -= Bridge_StateChanged;", StringComparison.Ordinal), "A failed bridge must tear down its controller and reconnect on the next start, and the bridge status must follow the connection state.");
 
-// ----- Bridge start coordinator (v0.14.14): generations, one shared start, whole-start deadline (Bridge/BridgeStartup.cs) -----
+// ----- Bridge start coordinator (v0.14.15): generations, one shared start, whole-start deadline (Bridge/BridgeStartup.cs) -----
 Assert(BridgePolicy.StartTimeout == TimeSpan.FromSeconds(20), "The whole bridge start must have a 20 s deadline.");
 {
     var delays = new List<TaskCompletionSource>();
@@ -423,9 +423,17 @@ Assert(startAwaits == 3 && startChecks == 3
     && startCore.Contains("catch (Exception ex) when (attempt < 3 && _startup.IsCurrent(generation))", StringComparison.Ordinal),
     "StartCoreAsync must check the generation after each await before touching fields, and close a controller that arrives late.");
 static int StartCoreLastAwait(string source) => source.LastIndexOf("await Task.Delay", StringComparison.Ordinal);
-Assert(bridgeCode.Contains("if (!ReferenceEquals(sender, _core)) { e.Cancel = true; return; }", StringComparison.Ordinal)
-    && System.Text.RegularExpressions.Regex.Matches(bridgeCode, @"if \(!ReferenceEquals\(sender, _core\)").Count == 4
-    && bridgeCode.Contains("_startup.Succeed(generation)", StringComparison.Ordinal), "Event handlers must ignore any sender other than the current core.");
+Assert(!bridgeCode.Contains("ReferenceEquals(sender", StringComparison.Ordinal)
+    && bridgeCode.Contains("_navigationCompleted = (_, e) => HandleNavigationCompleted(generation, e);", StringComparison.Ordinal)
+    && bridgeCode.Contains("_webMessageReceived = (_, e) => HandleWebMessage(generation, e);", StringComparison.Ordinal)
+    && bridgeCode.Contains("_processFailed = (_, e) => Fail(generation,", StringComparison.Ordinal)
+    && bridgeCode.Contains("_core.NavigationCompleted += _navigationCompleted;", StringComparison.Ordinal)
+    && bridgeCode.Contains("if (!_startup.IsLive(generation)) return;", StringComparison.Ordinal)
+    && bridgeCode.Contains("!_startup.IsCurrent(generation) || State != BridgeConnectionState.Connecting", StringComparison.Ordinal)
+    && bridgeCode.Contains("_startup.Succeed(generation)", StringComparison.Ordinal), "Stateful handlers must be bound to their attempt's generation, never to a sender comparison.");
+var navStarting = bridgeCode[bridgeCode.IndexOf("private void Core_NavigationStarting", StringComparison.Ordinal)..bridgeCode.IndexOf("private static void Core_FrameNavigationStarting", StringComparison.Ordinal)];
+Assert(!navStarting.Replace("object? sender", "", StringComparison.Ordinal).Contains("sender", StringComparison.Ordinal) && !navStarting.Contains("generation", StringComparison.Ordinal),
+    "The bridge navigation guard must not depend on the sender or a generation.");
 var teardownBody = bridgeCode[bridgeCode.IndexOf("private void Teardown(", StringComparison.Ordinal)..bridgeCode.IndexOf("private static void CloseQuietly", StringComparison.Ordinal)];
 var failBody = bridgeCode[bridgeCode.IndexOf("private void Fail(int generation", StringComparison.Ordinal)..bridgeCode.IndexOf("private void FailPending", StringComparison.Ordinal)];
 var disposeBody = bridgeCode[bridgeCode.IndexOf("public void Dispose()", StringComparison.Ordinal)..bridgeCode.IndexOf("private void Teardown(", StringComparison.Ordinal)];
@@ -433,7 +441,9 @@ Assert(System.Text.RegularExpressions.Regex.Matches(bridgeCode, @"private void T
     && failBody.Contains("Teardown(BridgeConnectionState.Unavailable", StringComparison.Ordinal)
     && failBody.Contains("start timeout (", StringComparison.Ordinal)
     && disposeBody.Contains("Teardown(BridgeConnectionState.Closed", StringComparison.Ordinal) && disposeBody.Contains("DestroyWindow(_hostWindow)", StringComparison.Ordinal)
-    && teardownBody.Contains("core.ProcessFailed -= Core_ProcessFailed;", StringComparison.Ordinal)
+    && teardownBody.Contains("core.ProcessFailed -= processFailed;", StringComparison.Ordinal)
+    && teardownBody.Contains("core.NavigationCompleted -= navigationCompleted;", StringComparison.Ordinal)
+    && teardownBody.Contains("core.WebMessageReceived -= webMessageReceived;", StringComparison.Ordinal)
     && teardownBody.Contains("CloseQuietly(controller);", StringComparison.Ordinal) && teardownBody.Contains("FailPending(pendingCode);", StringComparison.Ordinal)
     && bridgeCode.Contains("_startup.Fail(generation)", StringComparison.Ordinal), "Failure, expiry and Dispose must share one teardown path.");
 Assert(loginCode.Contains("IsWebMessageEnabled = false", StringComparison.Ordinal)
@@ -1465,4 +1475,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.14 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.15 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

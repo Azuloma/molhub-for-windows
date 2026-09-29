@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.14.15
+
+- Fixed a v0.14.14 regression in which the data connection stayed "Connecting…" and never connected.
+- No Web API or bridge contract changed.
+
 ## v0.14.14
 
 - Fixed pages waiting forever when the data bridge could not start. After 20 seconds they now show the connection error with Retry, and Retry connects the bridge again.
