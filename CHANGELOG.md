@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.14.17
+
+- Commit history: removed the leftover intro text.
+- The summary counts and Refresh now share one row: counts on the left (shown only once a summary arrives), Refresh on the right.
+- The freed space is removed.
+- No Web API or bridge contract changed.
+
+## v0.14.16
+
+- Simplified the content area by removing the page titles of Dashboard, Projects, Commit history and Project management; the navigation already names the page.
+- Projects: the search box and Refresh share one row. Commit history keeps its intro text with Refresh beside it.
+- Project management: the intro text is gone. A toolbar row holds the project picker (shown only while project content is shown) and Refresh.
+- The freed space is removed; page padding is unchanged.
+- No Web API or bridge contract changed.
+
 ## v0.14.15
 
 - Fixed a v0.14.14 regression in which the data connection stayed "Connecting…" and never connected.

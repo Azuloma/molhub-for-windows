@@ -346,15 +346,6 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         side.Children.Add(stats);
 
         var main = new StackPanel { Spacing = 12 };
-        var header = new Grid { ColumnSpacing = 8 };
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        header.Children.Add(PageParts.Heading(L("Page_Projects"), AutomationHeadingLevel.Level1, "TitleTextBlockStyle"));
-        var refresh = _p.SubtleButton(L("Projects_Refresh"), "\uE72C", () => _ = LoadListAsync(append: false));
-        Grid.SetColumn(refresh, 1);
-        header.Children.Add(refresh);
-        main.Children.Add(header);
-
         var search = new AutoSuggestBox
         {
             PlaceholderText = L("Projects_SearchPlaceholder"),
@@ -364,7 +355,15 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         };
         AutomationProperties.SetName(search, L("Projects_SearchPlaceholder"));
         search.QuerySubmitted += (_, e) => ApplyQuery(e.QueryText);
-        main.Children.Add(search);
+        var toolbar = new Grid { ColumnSpacing = 8 };
+        toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        toolbar.Children.Add(search);
+        var refresh = _p.SubtleButton(L("Projects_Refresh"), "\uE72C", () => _ = LoadListAsync(append: false));
+        refresh.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(refresh, 1);
+        toolbar.Children.Add(refresh);
+        main.Children.Add(toolbar);
 
         if (_query.Length > 0)
         {

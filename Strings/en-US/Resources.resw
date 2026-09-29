@@ -168,7 +168,6 @@
   <data name="Projects_ErrorUnexpectedTitle"><value>Projects couldn&apos;t be loaded</value></data>
   <data name="Projects_CommitCountOne"><value>1 commit</value></data>
   <data name="History_Title"><value>Your commit history</value></data>
-  <data name="History_Intro"><value>Commits you have published across your projects.</value></data>
   <data name="History_Summary"><value>History summary</value></data>
   <data name="History_TotalCommits"><value>Total commits</value></data>
   <data name="History_Projects"><value>Projects</value></data>
@@ -204,7 +203,6 @@
   <data name="Maintenance_ErrorSession"><value>Sign in again to load server maintenance.</value></data>
   <data name="Maintenance_ErrorUnexpectedTitle"><value>Server maintenance couldn&apos;t be loaded</value></data>
   <data name="Page_Project management"><value>Project management</value></data>
-  <data name="Manage_Intro"><value>Manage membership, work reservations and approval requests for your projects.</value></data>
   <data name="Manage_None"><value>You do not manage any projects.</value></data>
   <data name="Manage_FirstProjectsOnly"><value>Showing the first 100 projects.</value></data>
   <data name="Manage_Loading"><value>Loading project management…</value></data>

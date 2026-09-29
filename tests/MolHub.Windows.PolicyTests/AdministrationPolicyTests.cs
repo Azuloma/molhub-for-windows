@@ -150,7 +150,7 @@ internal static class AdministrationPolicyTests
             .Concat(new[] { "approved", "rejected", "suspended", "force_release", "reset_code_issued", "password_reset", "project_created", "admin_created", "admin_recovered", "project_deleted", "project_restored", "auth_smoke_test", "discord_linked", "discord_disabled", "discord_retry", "discord_commands_registered", "discord_commands_migrated" }.Select(action => "Admin_Audit_" + action))
             .Concat(new[] { "pending", "sending", "sent", "failed", "cancelled" }.Select(status => "Admin_Discord_Status_" + status));
         foreach (var key in requiredKeys) Check(localizedAdminKeys["en-US"].Contains(key), $"both locales must define {key}.");
-        Check(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.15</Version>", StringComparison.Ordinal)
-            && File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.15.0\"", StringComparison.Ordinal), "release version must be v0.14.15.");
+        Check(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.17</Version>", StringComparison.Ordinal)
+            && File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.17.0\"", StringComparison.Ordinal), "release version must be v0.14.17.");
     }
 }

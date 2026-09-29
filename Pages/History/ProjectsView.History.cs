@@ -49,20 +49,15 @@ internal sealed partial class ProjectsView
     {
         var root = new StackPanel { Spacing = 16 };
 
+        // One row: the summary counts (when they exist) with Refresh at the right.
         var header = new Grid { ColumnSpacing = 12 };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var titles = new StackPanel { Spacing = 4 };
-        titles.Children.Add(PageParts.Heading(L("History_Title"), AutomationHeadingLevel.Level1, "TitleTextBlockStyle"));
-        titles.Children.Add(_p.Secondary(L("History_Intro")));
-        header.Children.Add(titles);
         // Assigned once the timeline exists.
         Func<Task> reload = () => Task.CompletedTask;
         var refresh = _p.SubtleButton(L("Projects_Refresh"), "\uE72C", () => _ = reload());
-        refresh.VerticalAlignment = VerticalAlignment.Top;
+        refresh.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(refresh, 1);
-        header.Children.Add(refresh);
-        root.Children.Add(header);
 
         // Counts come only from the server `summary` for the current filters; hidden until one arrives.
         var stats = new InlineWrapPanel { HorizontalSpacing = 24, Visibility = Visibility.Collapsed };
@@ -70,7 +65,10 @@ internal sealed partial class ProjectsView
         var total = SummaryStat(stats, "History_TotalCommits");
         var projects = SummaryStat(stats, "History_Projects");
         var versions = SummaryStat(stats, "History_NamedVersions");
-        root.Children.Add(stats);
+        stats.VerticalAlignment = VerticalAlignment.Center;
+        header.Children.Add(stats);
+        header.Children.Add(refresh);
+        root.Children.Add(header);
 
         root.Children.Add(BuildCommitTimeline(
             screen,

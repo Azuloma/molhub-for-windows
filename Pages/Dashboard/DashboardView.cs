@@ -50,10 +50,7 @@ internal sealed class DashboardView : UserControl
         _openPublish = openPublish;
         _signInAgain = signInAgain;
 
-        var title = new TextBlock { Text = _l("Page_Dashboard"), Style = Res("TitleTextBlockStyle") };
-        AutomationProperties.SetHeadingLevel(title, AutomationHeadingLevel.Level1);
         var root = new StackPanel { Spacing = 20, Padding = new Thickness(32, 28, 32, 32) };
-        root.Children.Add(title);
         root.Children.Add(_statusBar);
         root.Children.Add(_body);
         Content = PageParts.CenteredPage(root, 1280);

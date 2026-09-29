@@ -60,13 +60,16 @@ internal sealed class ManagementView : UserControl
         AutomationProperties.SetName(_busy, L("Work_Sending"));
 
         _refresh = _p.SubtleButton(L("Dashboard_Refresh"), RefreshGlyph, () => _ = LoadAsync());
-        var title = new Grid { ColumnSpacing = 12 };
-        title.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        title.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        title.Children.Add(PageParts.Heading(L("Page_Project management"), AutomationHeadingLevel.Level1, "TitleTextBlockStyle"));
+        // Toolbar: the project picker (shown only while the body is the content) and Refresh (always visible).
+        var toolbar = new Grid { ColumnSpacing = 12 };
+        toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        toolbar.Children.Add(_picker);
+        _refresh.VerticalAlignment = VerticalAlignment.Bottom;
         Grid.SetColumn(_refresh, 1);
-        title.Children.Add(_refresh);
+        toolbar.Children.Add(_refresh);
 
+        _picker.Visibility = Visibility.Collapsed;
         _picker.Header = L("History_ProjectFilter");
         AutomationProperties.SetName(_picker, L("History_ProjectFilter"));
         _picker.SelectionChanged += (_, _) =>
@@ -80,14 +83,12 @@ internal sealed class ManagementView : UserControl
         _limitNote.Visibility = Visibility.Collapsed;
 
         var content = new StackPanel { Spacing = 16 };
-        content.Children.Add(_picker);
         content.Children.Add(_limitNote);
         content.Children.Add(_detail);
         _content = content;
 
         var root = new StackPanel { Spacing = 16, Padding = new Thickness(32, 28, 32, 32) };
-        root.Children.Add(title);
-        root.Children.Add(_p.Secondary(L("Manage_Intro")));
+        root.Children.Add(toolbar);
         root.Children.Add(_statusBar);
         root.Children.Add(_busy);
         root.Children.Add(_body);
@@ -116,7 +117,11 @@ internal sealed class ManagementView : UserControl
     private async Task LoadAsync()
     {
         var ticket = _listLoad.Begin();
-        if (!_listLoad.HasContent) _body.Content = _p.LoadingIndicator("Manage_Loading");
+        if (!_listLoad.HasContent)
+        {
+            _picker.Visibility = Visibility.Collapsed;
+            _body.Content = _p.LoadingIndicator("Manage_Loading");
+        }
         _refresh.IsEnabled = false;
         var result = await _request("manageProjects", ManagementModel.ListPayload());
         if (!_listLoad.IsCurrent(ticket)) return;
@@ -127,7 +132,11 @@ internal sealed class ManagementView : UserControl
             _listLoad.Complete(ticket, success: false, DateTimeOffset.Now);
             _refresh.IsEnabled = true;
             ShowError(result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result));
-            if (!_listLoad.HasContent) _body.Content = null;
+            if (!_listLoad.HasContent)
+            {
+                _picker.Visibility = Visibility.Collapsed;
+                _body.Content = null;
+            }
             return;
         }
 
@@ -142,12 +151,14 @@ internal sealed class ManagementView : UserControl
             _selected = null;
             _detailLoad.Reset();
             _detail.Content = null;
+            _picker.Visibility = Visibility.Collapsed;
             _body.Content = _p.Secondary(L("Manage_None"));
             return;
         }
 
         _selected = ManagementModel.Select(_projects, _selected);
         FillPicker();
+        _picker.Visibility = Visibility.Visible;
         _body.Content = _content;
         _detailLoad.Reset();
         await LoadDetailAsync(_detailLoad.Begin());

@@ -185,12 +185,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.15</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.15.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.15.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.15.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.17</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.17.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.17.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.17.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.15", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.15", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.15", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.14", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.15 above v0.14.14 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.17", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.17", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.17", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.16", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.17 above v0.14.16 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -809,6 +809,13 @@ Assert(ManagementModel.StatusKey("cancelled") == "Manage_Status_cancelled" && Ma
 Assert(new[] { "manageProjects", "manageProject" }.All(c => BridgePolicy.IsKnownCommand(c) && !BridgePolicy.IsWrite(c)),
     "Project management must use only the manage read commands.");
 var managementCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManagementView.cs"));
+// v0.14.16: the page titles and the management intro are gone from the content area (navigation and breadcrumbs still name the page).
+Assert(!File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Dashboard", "DashboardView.cs")).Contains("\"Page_Dashboard\"", StringComparison.Ordinal)
+    && !File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.cs")).Contains("Heading(L(\"Page_Projects\")", StringComparison.Ordinal)
+    && !File.ReadAllText(Path.Combine(sourceRoot, "Pages", "History", "ProjectsView.History.cs")).Contains("Heading(L(\"History_Title\")", StringComparison.Ordinal)
+    && !File.ReadAllText(Path.Combine(sourceRoot, "Pages", "History", "ProjectsView.History.cs")).Contains("History_Intro", StringComparison.Ordinal)
+    && !managementCode.Contains("\"Page_Project management\"", StringComparison.Ordinal) && !managementCode.Contains("Manage_Intro", StringComparison.Ordinal),
+    "Dashboard, Projects, Commit history and Project management must not add a page title (or the management intro) to their content.");
 Assert(mainCode.Contains("if (page == NativePage.ProjectManagement) return CreateManagementPage();", StringComparison.Ordinal)
     && mainXaml.Contains("Tag=\"ProjectManagement\"", StringComparison.Ordinal)
     && managementCode.Contains("\"manageProjects\"", StringComparison.Ordinal) && managementCode.Contains("\"manageProject\"", StringComparison.Ordinal)
@@ -1475,4 +1482,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.15 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.17 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

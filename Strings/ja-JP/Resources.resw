@@ -168,7 +168,6 @@
   <data name="Projects_ErrorUnexpectedTitle"><value>プロジェクトを読み込めませんでした</value></data>
   <data name="Projects_CommitCountOne"><value>1 コミット</value></data>
   <data name="History_Title"><value>自分のコミット履歴</value></data>
-  <data name="History_Intro"><value>参加プロジェクトへ自分が投稿したコミットです。</value></data>
   <data name="History_Summary"><value>履歴の集計</value></data>
   <data name="History_TotalCommits"><value>コミット数</value></data>
   <data name="History_Projects"><value>プロジェクト</value></data>
@@ -204,7 +203,6 @@
   <data name="Maintenance_ErrorSession"><value>サーバーメンテナンスを読み込むには再度サインインしてください。</value></data>
   <data name="Maintenance_ErrorUnexpectedTitle"><value>サーバーメンテナンスを読み込めませんでした</value></data>
   <data name="Page_Project management"><value>プロジェクト管理</value></data>
-  <data name="Manage_Intro"><value>担当プロジェクトの所属・作業予約・承認申請を管理します。</value></data>
   <data name="Manage_None"><value>管理を担当するプロジェクトはありません。</value></data>
   <data name="Manage_FirstProjectsOnly"><value>最初の100件のプロジェクトを表示しています。</value></data>
   <data name="Manage_Loading"><value>プロジェクト管理を読み込み中…</value></data>
