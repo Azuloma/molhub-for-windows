@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.14.19
+
+- Dashboard: project names in "Recent commits" and "Activity" are now links that open the project overview (same path as "Top projects"; Back returns to the list), matching the web dashboard.
+- A name is a link only when the answer carries a `projectId`; otherwise it stays plain text.
+- The link reads "Open project: <name>" for screen readers.
+- No Web API or bridge contract changed.
+
+## v0.14.18
+
+- Version info: redesigned as cards. The page title and description are gone.
+- Hero card: the MolHub banner logo (white artwork in dark themes, black in the light theme), a divider, the large version number and a blue "Beta" badge.
+- "Runtime environment" card: UI framework, Windows App SDK assembly, WebView2 version.
+- "Build & connection" card: process architecture, package identity, Web data connection.
+- The Web data connection shows a status indicator: Connecting, Connected, Session ended (with "Sign in again to load data.") or Unavailable; it is announced politely to screen readers.
+- Below 860 px available width the hero and the two cards stack.
+- No Web API or bridge contract changed.
+
 ## v0.14.17
 
 - Commit history: removed the leftover intro text.

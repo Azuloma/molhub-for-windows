@@ -15,6 +15,10 @@
                     <SolidColorBrush x:Key="MolHubAccentSubtleBrush" Color="#1AB83E47" />
                     <SolidColorBrush x:Key="MolHubChromeBrush" Color="#F7F4F4" />
                     <SolidColorBrush x:Key="MolHubSurfaceBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="MolHubChannelBadgeBackgroundBrush" Color="#E8F1FB" />
+                    <SolidColorBrush x:Key="MolHubChannelBadgeBorderBrush" Color="#8DB4E2" />
+                    <SolidColorBrush x:Key="MolHubChannelBadgeForegroundBrush" Color="#0F4C8A" />
+                    <BitmapImage x:Key="MolHubBannerImage" UriSource="ms-appx:///Assets/MolHubBannerOnLight.png" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="MolHubAccentBrush" Color="#EF7C82" />
@@ -22,6 +26,10 @@
                     <SolidColorBrush x:Key="MolHubAccentSubtleBrush" Color="#25EF7C82" />
                     <SolidColorBrush x:Key="MolHubChromeBrush" Color="#2A2223" />
                     <SolidColorBrush x:Key="MolHubSurfaceBrush" Color="#20191A" />
+                    <SolidColorBrush x:Key="MolHubChannelBadgeBackgroundBrush" Color="#1E2B3C" />
+                    <SolidColorBrush x:Key="MolHubChannelBadgeBorderBrush" Color="#3E6490" />
+                    <SolidColorBrush x:Key="MolHubChannelBadgeForegroundBrush" Color="#CFE3FF" />
+                    <BitmapImage x:Key="MolHubBannerImage" UriSource="ms-appx:///Assets/MolHubBannerOnDark.png" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <!-- Use the OS-provided high-contrast highlight pair; never hard-code
@@ -31,6 +39,10 @@
                     <StaticResource x:Key="MolHubAccentSubtleBrush" ResourceKey="SystemControlHighlightAccentBrush" />
     <StaticResource x:Key="MolHubChromeBrush" ResourceKey="SystemControlPageBackgroundChromeLowBrush" />
     <StaticResource x:Key="MolHubSurfaceBrush" ResourceKey="SystemControlPageBackgroundBaseLowBrush" />
+                    <StaticResource x:Key="MolHubChannelBadgeBackgroundBrush" ResourceKey="SystemColorWindowColorBrush" />
+                    <StaticResource x:Key="MolHubChannelBadgeBorderBrush" ResourceKey="SystemColorHighlightColorBrush" />
+                    <StaticResource x:Key="MolHubChannelBadgeForegroundBrush" ResourceKey="SystemColorWindowTextColorBrush" />
+                    <BitmapImage x:Key="MolHubBannerImage" UriSource="ms-appx:///Assets/MolHubBannerOnDark.png" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <x:Double x:Key="MolHubSpacing4">4</x:Double>
@@ -86,6 +98,89 @@
                 <Setter Property="FontFamily" Value="Cascadia Mono, Consolas" />
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <!-- Version info: banner logo, hero texts, channel badge, row icons and the bridge status indicator. -->
+            <Style x:Key="VersionBannerImageStyle" TargetType="Image">
+                <Setter Property="Source" Value="{ThemeResource MolHubBannerImage}" />
+                <Setter Property="Stretch" Value="Uniform" />
+            </Style>
+            <Style x:Key="VersionHeroLabelStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="VersionHeroNumberStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="56" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="LineStackingStrategy" Value="MaxHeight" />
+                <Setter Property="LineHeight" Value="64" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            </Style>
+            <Style x:Key="VersionChannelBadgeStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource MolHubChannelBadgeBackgroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource MolHubChannelBadgeBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="Padding" Value="12,4" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+            </Style>
+            <Style x:Key="VersionChannelBadgeTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource MolHubChannelBadgeForegroundBrush}" />
+            </Style>
+            <Style x:Key="VersionInfoRowIconStyle" TargetType="FontIcon">
+                <Setter Property="FontFamily" Value="{StaticResource SymbolThemeFontFamily}" />
+                <Setter Property="FontSize" Value="28" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+                <Setter Property="VerticalAlignment" Value="Top" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+            </Style>
+            <Style x:Key="VersionStatusTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="VersionStatusSuccessTextStyle" TargetType="TextBlock" BasedOn="{StaticResource VersionStatusTextStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+            </Style>
+            <Style x:Key="VersionStatusCautionTextStyle" TargetType="TextBlock" BasedOn="{StaticResource VersionStatusTextStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+            </Style>
+            <Style x:Key="VersionStatusCriticalTextStyle" TargetType="TextBlock" BasedOn="{StaticResource VersionStatusTextStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+            </Style>
+            <Style x:Key="VersionStatusSuccessBadgeStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Width" Value="24" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="VersionStatusSuccessGlyphStyle" TargetType="FontIcon">
+                <Setter Property="FontFamily" Value="{StaticResource SymbolThemeFontFamily}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="VersionStatusCautionGlyphStyle" TargetType="FontIcon">
+                <Setter Property="FontFamily" Value="{StaticResource SymbolThemeFontFamily}" />
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="VersionStatusCriticalGlyphStyle" TargetType="FontIcon">
+                <Setter Property="FontFamily" Value="{StaticResource SymbolThemeFontFamily}" />
+                <Setter Property="FontSize" Value="20" />
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="VersionHeroDividerStyle" TargetType="Border">
+                <Setter Property="Width" Value="1" />
+                <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
             </Style>
 
             <!-- Projects: private label and the reservation status (Available for work / Working). -->

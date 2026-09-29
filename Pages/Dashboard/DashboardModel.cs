@@ -9,6 +9,7 @@ public sealed record DashboardProject(string Id, string Name, DashboardReservati
 
 public sealed record DashboardCommit(
     string Id,
+    string? ProjectId,
     string ProjectName,
     string Title,
     string Changes,
@@ -17,7 +18,7 @@ public sealed record DashboardCommit(
     byte[]? AuthorAvatar,
     DateTimeOffset? CreatedAt);
 
-public sealed record DashboardActivity(string ProjectName, string Actor, DateTimeOffset? CreatedAt);
+public sealed record DashboardActivity(string? ProjectId, string ProjectName, string Actor, DateTimeOffset? CreatedAt);
 
 /// <summary>The `/api/v1/dashboard` DTO reduced to what the native Dashboard shows. Every count comes from server data.</summary>
 public sealed record DashboardData(
@@ -100,6 +101,7 @@ public static class DashboardModel
             }
             commitList.Add(new DashboardCommit(
                 id,
+                Text(item, "projectId", MaxIdLength),
                 Text(item, "projectName", MaxNameLength) ?? string.Empty,
                 title,
                 Text(item, "changes", MaxChangesLength, trim: false) ?? string.Empty,
@@ -116,7 +118,7 @@ public static class DashboardModel
             {
                 var projectName = Text(item, "projectName", MaxNameLength);
                 if (projectName is null) continue;
-                activityList.Add(new DashboardActivity(projectName, Text(item, "actor", MaxNameLength) ?? string.Empty, Date(item, "createdAt")));
+                activityList.Add(new DashboardActivity(Text(item, "projectId", MaxIdLength), projectName, Text(item, "actor", MaxNameLength) ?? string.Empty, Date(item, "createdAt")));
             }
         }
 

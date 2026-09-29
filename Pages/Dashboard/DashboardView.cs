@@ -254,9 +254,7 @@ internal sealed class DashboardView : UserControl
             icon.Margin = new Thickness(0, 3, 0, 0);
             row.Children.Add(icon);
             var text = new StackPanel { Spacing = 2 };
-            var project = new TextBlock { Text = item.ProjectName, Style = Res("DashboardAccentTextStyle"), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
-            ToolTipService.SetToolTip(project, item.ProjectName);
-            text.Children.Add(project);
+            text.Children.Add(ProjectLink(item.ProjectId, item.ProjectName));
             var detail = string.Join(" · ", new[] { item.Actor, DashboardModel.FormatDate(item.CreatedAt, _language) }.Where(part => part.Length > 0));
             text.Children.Add(new TextBlock { Text = detail, Style = Res("DashboardCaptionTextStyle") });
             Grid.SetColumn(text, 1);
@@ -354,6 +352,28 @@ internal sealed class DashboardView : UserControl
         return header;
     }
 
+    /// <summary>Accent project name; a link that opens the project when the server sent its id, plain text otherwise.</summary>
+    private FrameworkElement ProjectLink(string? projectId, string projectName)
+    {
+        var label = new TextBlock { Text = projectName, Style = Res("DashboardAccentTextStyle"), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
+        ToolTipService.SetToolTip(label, projectName);
+        if (string.IsNullOrEmpty(projectId)) return label;
+
+        var link = new HyperlinkButton
+        {
+            Content = label,
+            Padding = new Thickness(0),
+            MinWidth = 0,
+            MinHeight = 0,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        link.PointerEntered += (_, _) => label.TextDecorations = global::Windows.UI.Text.TextDecorations.Underline;
+        link.PointerExited += (_, _) => label.TextDecorations = global::Windows.UI.Text.TextDecorations.None;
+        AutomationProperties.SetName(link, $"{_l("Projects_OpenProject")}: {projectName}");
+        link.Click += (_, _) => _openProject(projectId, projectName);
+        return link;
+    }
+
     private FrameworkElement FeedItem(DashboardCommit commit)
     {
         var item = new StackPanel { Spacing = 10, Padding = new Thickness(0, 16, 0, 16) };
@@ -373,8 +393,7 @@ internal sealed class DashboardView : UserControl
         who.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var author = new TextBlock { Text = commit.AuthorName, Style = Res("BodyStrongTextBlockStyle") };
         var verb = new TextBlock { Text = _l("Dashboard_Published"), Style = Res("DashboardSecondaryTextStyle") };
-        var project = new TextBlock { Text = commit.ProjectName, Style = Res("DashboardAccentTextStyle"), TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
-        ToolTipService.SetToolTip(project, commit.ProjectName);
+        var project = ProjectLink(commit.ProjectId, commit.ProjectName);
         Grid.SetColumn(verb, 1);
         Grid.SetColumn(project, 2);
         who.Children.Add(author);

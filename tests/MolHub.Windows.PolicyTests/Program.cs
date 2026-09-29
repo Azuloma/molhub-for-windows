@@ -185,20 +185,49 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.17</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.17.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.17.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.17.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.19</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.19.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.19.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.19.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.17", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.17", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.17", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.16", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.17 above v0.14.16 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.19", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.14.19", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.14.19", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.17", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.19 above v0.14.17 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
     Assert(resource.Contains("NotConnected", StringComparison.Ordinal) && resource.Contains("Page_Dashboard", StringComparison.Ordinal)
         && resource.Contains("AccountMenuForFormat", StringComparison.Ordinal)
         && resource.Contains("SettingsDescription", StringComparison.Ordinal)
-        && resource.Contains("VersionInfoDescription", StringComparison.Ordinal), $"Localization resources are incomplete: {locale}");
+        && resource.Contains("VersionInfo_RuntimeHeader", StringComparison.Ordinal), $"Localization resources are incomplete: {locale}");
 }
+// v0.14.18: the Version info page is a card layout without a page title or description; its strings, styles and banner assets must exist.
+foreach (var locale in new[] { "en-US", "ja-JP" })
+{
+    var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
+    foreach (var key in new[] { "BridgeConnectedDetail", "BridgeSessionEndedDetail", "VersionInfo_RuntimeHeader", "VersionInfo_BuildHeader", "VersionInfo_WebViewRole", "VersionInfo_LogoName", "Page_Version info" })
+        Assert(resource.Contains($"<data name=\"{key}\"", StringComparison.Ordinal), $"Version info string is missing: {key} ({locale})");
+    Assert(!resource.Contains("VersionInfoDescription", StringComparison.Ordinal), $"The removed Version info description string must not return: {locale}");
+}
+var versionPageStart = mainCode.IndexOf("private FrameworkElement CreateVersionInfoPage()", StringComparison.Ordinal);
+var versionPageEnd = mainCode.IndexOf("private static RadioButton? FindRadioButton", StringComparison.Ordinal);
+Assert(versionPageStart >= 0 && versionPageEnd > versionPageStart, "The Version info page code must be discoverable.");
+var versionPageCode = mainCode.Substring(versionPageStart, versionPageEnd - versionPageStart);
+Assert(!versionPageCode.Contains("VersionInfoDescription", StringComparison.Ordinal) && !versionPageCode.Contains("TitleTextBlockStyle", StringComparison.Ordinal)
+    && !versionPageCode.Contains("Page_Version info", StringComparison.Ordinal), "The Version info page must not add a title or description.");
+foreach (var literal in Regex.Matches(mainCode, @"VersionStyle\(""([^""]+)""\)").Select(match => match.Groups[1].Value).Distinct())
+    Assert(appResourceKeys.Contains(literal) || winUiResourceKeys.Contains(literal), $"MainWindow looks up style \"{literal}\", which App.xaml does not define.");
+var appXamlText = File.ReadAllText(Path.Combine(sourceRoot, "App.xaml"));
+Assert(Regex.IsMatch(appXamlText, "x:Key=\"Light\"[\\s\\S]*?MolHubBannerImage\" UriSource=\"ms-appx:///Assets/MolHubBannerOnLight.png\"[\\s\\S]*?x:Key=\"Dark\"[\\s\\S]*?MolHubBannerImage\" UriSource=\"ms-appx:///Assets/MolHubBannerOnDark.png\"[\\s\\S]*?x:Key=\"HighContrast\"[\\s\\S]*?MolHubBannerImage\" UriSource=\"ms-appx:///Assets/MolHubBannerOnDark.png\""),
+    "App.xaml must map the banner Light to OnLight and Dark/HighContrast to OnDark.");
+Assert(appXamlText.Contains("VersionBannerImageStyle", StringComparison.Ordinal) && appXamlText.Contains("{ThemeResource MolHubBannerImage}", StringComparison.Ordinal), "The banner style must use the themed image.");
+var bannerDark = Path.Combine(sourceRoot, "Assets", "MolHubBannerOnDark.png");
+var bannerLight = Path.Combine(sourceRoot, "Assets", "MolHubBannerOnLight.png");
+Assert(File.Exists(bannerDark) && File.Exists(bannerLight), "Both banner assets must exist.");
+static (int Width, int Height) PngSize(string path)
+{
+    var header = File.ReadAllBytes(path).Take(24).ToArray();
+    return (System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(16, 4)), System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header.AsSpan(20, 4)));
+}
+Assert(PngSize(bannerDark) == (1400, 460) && PngSize(bannerLight) == PngSize(bannerDark), "Both banner assets must be 1400x460.");
 Assert(!File.Exists(Path.Combine(sourceRoot, "Assets", "Fonts", "MonaSans.ttf")), "Native Mona Sans binary must remain absent.");
 
 var manifest = File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest"));
@@ -473,6 +502,23 @@ Assert(dashboard is { ActiveProjects: 3, InProgress: 2, PendingApprovals: 3 } &&
     "Dashboard counts must be computed from server data exactly like the web dashboard.");
 Assert(dashboard!.Commits.Count == 1 && dashboard.Commits[0].AuthorName == "kalvin" && dashboard.Commits[0].AuthorAvatar is null && dashboard.Commits[0].Version == "v0.4.785B"
     && dashboard.Activity.Count == 1 && dashboard.Activity[0].Actor == "azunel", "Dashboard commits/activity must be parsed with bounded fields and validated avatars.");
+// v0.14.19: recent-commit and activity project names open the project; a missing projectId keeps the item without a link.
+var dashboardLinks = DashboardModel.Parse(Json("""{"projects":[],"commits":[{"id":"c1","projectId":"p1","projectName":"A","title":"T"},{"id":"c2","projectName":"B","title":"T2"}],"activity":[{"projectId":"p9","projectName":"C","actor":"x"},{"projectName":"D","actor":"y"}]}"""));
+Assert(dashboardLinks is { Commits.Count: 2, Activity.Count: 2 }
+    && dashboardLinks.Commits[0].ProjectId == "p1" && dashboardLinks.Commits[1].ProjectId is null
+    && dashboardLinks.Activity[0].ProjectId == "p9" && dashboardLinks.Activity[1].ProjectId is null,
+    "Dashboard commits and activity must carry the projectId and keep items that lack one.");
+var dashboardViewText = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Dashboard", "DashboardView.cs"));
+var projectLinkStart = dashboardViewText.IndexOf("private FrameworkElement ProjectLink(", StringComparison.Ordinal);
+var projectLinkEnd = projectLinkStart < 0 ? -1 : dashboardViewText.IndexOf("private FrameworkElement FeedItem(", projectLinkStart, StringComparison.Ordinal);
+var projectLinkBody = projectLinkStart >= 0 && projectLinkEnd > projectLinkStart ? dashboardViewText[projectLinkStart..projectLinkEnd] : string.Empty;
+Assert(projectLinkBody.Contains("string.IsNullOrEmpty(projectId)", StringComparison.Ordinal)
+    && projectLinkBody.IndexOf("string.IsNullOrEmpty(projectId)", StringComparison.Ordinal) < projectLinkBody.IndexOf("new HyperlinkButton", StringComparison.Ordinal)
+    && projectLinkBody.Contains("_openProject(projectId, projectName)", StringComparison.Ordinal)
+    && projectLinkBody.Contains("Projects_OpenProject", StringComparison.Ordinal)
+    && dashboardViewText.Contains("ProjectLink(commit.ProjectId, commit.ProjectName)", StringComparison.Ordinal)
+    && dashboardViewText.Contains("ProjectLink(item.ProjectId, item.ProjectName)", StringComparison.Ordinal),
+    "Dashboard feed and activity project names must be links that open the project, and only when a projectId exists.");
 Assert(DashboardModel.Parse(System.Text.Json.JsonDocument.Parse("{\"projects\":{}}").RootElement) is null
     && DashboardModel.Parse(System.Text.Json.JsonDocument.Parse("[]").RootElement) is null, "Unexpected dashboard shapes must not render.");
 Assert(DashboardModel.Preview(new string('a', 421)) == new string('a', 420) + "…" && DashboardModel.Preview("  short  ") == "short"
@@ -1482,4 +1528,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.17 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.14.19 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

@@ -8,7 +8,7 @@ public sealed record RuntimeVersionSnapshot(
     string DisplayVersion,
     string Framework,
     string WindowsAppSdkVersion,
-    string WebViewDescription,
+    string WebViewVersion,
     string Architecture,
     string PackageIdentity);
 
@@ -49,7 +49,7 @@ public static class RuntimeVersionInfo
             GetDisplayVersion(),
             "WinUI 3",
             appSdkVersion,
-            $"WebView2 {webViewVersion}; sign-in and hidden data bridge",
+            $"WebView2 {webViewVersion}",
             RuntimeInformation.ProcessArchitecture.ToString(),
             packageIdentity);
     }
