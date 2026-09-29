@@ -1,6 +1,5 @@
 bin/
 obj/
-AppPackages/
 TestResults/
 artifacts/
 *.user
