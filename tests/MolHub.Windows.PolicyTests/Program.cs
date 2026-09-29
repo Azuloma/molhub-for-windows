@@ -697,7 +697,7 @@ Assert(mainCode.Contains("if (page == NativePage.ProjectManagement) return Creat
     && !System.Text.RegularExpressions.Regex.IsMatch(managementCode, "[\uE000-\uF8FF]") && !managementCode.Contains("GLYPH_", StringComparison.Ordinal),
     "Project management must be the native page with the web's management writes and escaped glyphs.");
 Assert(managementCode.Contains("if (!_gate.TryEnter())", StringComparison.Ordinal) && managementCode.Contains("ManageWriteModel.Explain(result, createsRecord)", StringComparison.Ordinal)
-    && managementCode.Contains("LoadDetailAsync(_load.Begin(), keepContent: true)", StringComparison.Ordinal)
+    && managementCode.Contains("LoadDetailAsync(_detailLoad.Begin(), keepContent: true)", StringComparison.Ordinal)
     && managementCode.Contains("DefaultButton = ContentDialogButton.Close", StringComparison.Ordinal)
     && System.Text.RegularExpressions.Regex.Matches(managementCode, "await ConfirmAsync\\(").Count == 3
     && System.Text.RegularExpressions.Regex.IsMatch(mainCode, @"new ManagementView\([^;]*_writeGate,\s*OnWorkChanged\);"),
@@ -1178,7 +1178,8 @@ Assert(File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsV
     "The Projects list, the commit timelines, Maintenance, Dashboard and Profile must take their tickets from LoadState.");
 Assert(File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Work.cs")).Contains("_list.Invalidate();", StringComparison.Ordinal)
     && dashboardCode.Contains("public void MarkStale() => _loadState.Invalidate();", StringComparison.Ordinal)
-    && managementCode.Contains("public void MarkStale() => _load.Invalidate();", StringComparison.Ordinal)
+    && managementCode.Contains("_listLoad.Invalidate();", StringComparison.Ordinal)
+    && managementCode.Contains("_detailLoad.Invalidate();", StringComparison.Ordinal)
     && File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Administration", "AdministrationView.cs")).Contains("set.Invalidate();", StringComparison.Ordinal),
     "Every page that MainWindow marks stale after a write must invalidate its load states.");
 Assert(!profileCode.Contains("_loadState.Complete(writeTicket, success: true, DateTimeOffset.Now)", StringComparison.Ordinal) || profileCode.IndexOf("var writeTicket = _loadState.Begin();", StringComparison.Ordinal)
@@ -1186,8 +1187,13 @@ Assert(!profileCode.Contains("_loadState.Complete(writeTicket, success: true, Da
     "Profile stores the write's returned profile only through a ticket taken before the write.");
 Assert(!File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Management", "ManagementView.cs")).Contains("_loadedAt", StringComparison.Ordinal)
     && managementCode.IndexOf("_workChanged();", managementCode.IndexOf("private async Task RunWriteAsync", StringComparison.Ordinal), StringComparison.Ordinal)
-        < managementCode.IndexOf("LoadDetailAsync(_load.Begin(), keepContent: true)", StringComparison.Ordinal),
+        < managementCode.IndexOf("LoadDetailAsync(_detailLoad.Begin(), keepContent: true)", StringComparison.Ordinal),
     "Management reloads after a write with a ticket taken after the invalidation, never an unconditional 'now'.");
+Assert(managementCode.Contains("private readonly LoadState _listLoad = new();", StringComparison.Ordinal)
+    && managementCode.Contains("private readonly LoadState _detailLoad = new();", StringComparison.Ordinal)
+    && managementCode.Contains("_detailLoad.Reset();", StringComparison.Ordinal)
+    && managementCode.Contains("_detailLoad.NeedsLoad(now, StaleAfter)", StringComparison.Ordinal),
+    "Management must track the picker list and selected detail independently, including after selection changes.");
 
 // Source checks: every refused write explains the sign-out when the gate is closed.
 Assert(!pageSourceText.Contains("_gate.InFlight", StringComparison.Ordinal) && !pageSourceText.Contains("L(\"Work_BusyTitle\")", StringComparison.Ordinal)

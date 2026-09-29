@@ -43,8 +43,9 @@ internal sealed class ManagementView : UserControl
     private IReadOnlyList<ManagedProject> _projects = [];
     private string? _selected;
     private bool _updatingPicker;
-    // Ticket, phase and freshness of the project list and the chosen project's detail, which reload together (see LoadState.cs).
-    private readonly LoadState _load = new();
+    // The picker list and the chosen project have independent freshness and request tickets.
+    private readonly LoadState _listLoad = new();
+    private readonly LoadState _detailLoad = new();
 
     public ManagementView(Func<string, string> localize, string language, AuthenticatedUser user,
         Func<string, JsonObject?, Task<BridgeResult>> request, Action signInAgain, WriteGate gate, Action workChanged)
@@ -72,7 +73,8 @@ internal sealed class ManagementView : UserControl
         {
             if (_updatingPicker || _picker.SelectedItem is not ComboBoxItem { Tag: string id } || id == _selected) return;
             _selected = id;
-            _ = LoadDetailAsync(_load.Begin());
+            _detailLoad.Reset();
+            _ = LoadDetailAsync(_detailLoad.Begin());
         };
         _limitNote = PageParts.Caption(L("Manage_FirstProjectsOnly"));
         _limitNote.Visibility = Visibility.Collapsed;
@@ -95,32 +97,42 @@ internal sealed class ManagementView : UserControl
     private string L(string key) => _p.L(key);
 
     /// <summary>Reloads the next time the page is shown (a write changed a reservation).</summary>
-    public void MarkStale() => _load.Invalidate();
+    public void MarkStale()
+    {
+        _listLoad.Invalidate();
+        _detailLoad.Invalidate();
+    }
 
     /// <summary>Loads on first display and again when the data is older than a minute (the chosen project is kept).</summary>
-    public Task EnsureLoadedAsync() =>
-        _load.NeedsLoad(DateTimeOffset.Now, StaleAfter) ? LoadAsync() : Task.CompletedTask;
+    public Task EnsureLoadedAsync()
+    {
+        var now = DateTimeOffset.Now;
+        if (_listLoad.NeedsLoad(now, StaleAfter)) return LoadAsync();
+        return _selected is not null && _detailLoad.NeedsLoad(now, StaleAfter)
+            ? LoadDetailAsync(_detailLoad.Begin())
+            : Task.CompletedTask;
+    }
 
     private async Task LoadAsync()
     {
-        var ticket = _load.Begin();
-        if (!_load.HasContent) _body.Content = _p.LoadingIndicator("Manage_Loading");
+        var ticket = _listLoad.Begin();
+        if (!_listLoad.HasContent) _body.Content = _p.LoadingIndicator("Manage_Loading");
         _refresh.IsEnabled = false;
         var result = await _request("manageProjects", ManagementModel.ListPayload());
-        if (!_load.IsCurrent(ticket)) return;
+        if (!_listLoad.IsCurrent(ticket)) return;
 
         var list = result.Ok && result.Data is { } data ? ManagementModel.ParseList(data, result.Meta) : null;
         if (list is null)
         {
-            _load.Complete(ticket, success: false, DateTimeOffset.Now);
+            _listLoad.Complete(ticket, success: false, DateTimeOffset.Now);
             _refresh.IsEnabled = true;
             ShowError(result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result));
-            if (!_load.HasContent) _body.Content = null;
+            if (!_listLoad.HasContent) _body.Content = null;
             return;
         }
 
         _projects = list.Items;
-        _load.Complete(ticket, success: true, DateTimeOffset.Now);
+        _listLoad.Complete(ticket, success: true, DateTimeOffset.Now);
         _limitNote.Visibility = list.NextOffset is not null ? Visibility.Visible : Visibility.Collapsed;
         if (_projects.Count == 0)
         {
@@ -128,6 +140,8 @@ internal sealed class ManagementView : UserControl
             _refresh.IsEnabled = true;
             _statusBar.IsOpen = false;
             _selected = null;
+            _detailLoad.Reset();
+            _detail.Content = null;
             _body.Content = _p.Secondary(L("Manage_None"));
             return;
         }
@@ -135,7 +149,8 @@ internal sealed class ManagementView : UserControl
         _selected = ManagementModel.Select(_projects, _selected);
         FillPicker();
         _body.Content = _content;
-        await LoadDetailAsync(ticket);
+        _detailLoad.Reset();
+        await LoadDetailAsync(_detailLoad.Begin());
     }
 
     private void FillPicker()
@@ -164,7 +179,7 @@ internal sealed class ManagementView : UserControl
     {
         if (_selected is not { } projectId || ManagementModel.DetailPayload(projectId) is not { } payload)
         {
-            _load.Complete(ticket, success: false, DateTimeOffset.Now);
+            _detailLoad.Complete(ticket, success: false, DateTimeOffset.Now);
             return false;
         }
         // The picker stays enabled (keyboard focus stays on it); the ticket drops superseded replies.
@@ -172,18 +187,18 @@ internal sealed class ManagementView : UserControl
         // After a write the old cards stay visible (disabled) until the reload arrives, so the page does not jump.
         if (!keepContent) _detail.Content = _p.LoadingIndicator("Manage_Loading");
         var result = await _request("manageProject", payload);
-        if (!_load.IsCurrent(ticket)) return false;
+        if (!_detailLoad.IsCurrent(ticket)) return false;
         _refresh.IsEnabled = true;
 
         var detail = result.Ok && result.Data is { } data ? ManagementModel.ParseDetail(data) : null;
         if (detail is null)
         {
-            _load.Complete(ticket, success: false, DateTimeOffset.Now);
+            _detailLoad.Complete(ticket, success: false, DateTimeOffset.Now);
             ShowError(result.Ok ? ProjectsError.Unexpected : ProjectsModel.ErrorFor(result));
             _detail.Content = null;
             return false;
         }
-        _load.Complete(ticket, success: true, DateTimeOffset.Now);
+        _detailLoad.Complete(ticket, success: true, DateTimeOffset.Now);
         _statusBar.IsOpen = false;
         _detail.Content = BuildDetail(detail);
         return true;
@@ -609,7 +624,7 @@ internal sealed class ManagementView : UserControl
             // now, so returning to it meanwhile does not start a second, competing reload. The reload takes its ticket after
             // the invalidation, so its answer counts as fresh (never an unconditional "now").
             _workChanged();
-            var refreshed = await LoadDetailAsync(_load.Begin(), keepContent: true);
+            var refreshed = await LoadDetailAsync(_detailLoad.Begin(), keepContent: true);
             var stale = refreshed ? string.Empty : " " + L("Work_NotRefreshed");
             switch (outcome.Kind)
             {
