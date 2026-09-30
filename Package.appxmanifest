@@ -6,7 +6,7 @@
          xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
          xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
          IgnorableNamespaces="uap uap10 rescap com desktop">
-  <Identity Name="MolHub.Windows" Publisher="CN=MolHub, OID.2.25.311729368913984317654407730594956997722=1" Version="0.15.0.0" />
+  <Identity Name="MolHub.Windows" Publisher="CN=MolHub, OID.2.25.311729368913984317654407730594956997722=1" Version="0.15.1.0" />
   <Properties>
     <DisplayName>MolHub for Windows</DisplayName>
     <PublisherDisplayName>MolHub</PublisherDisplayName>

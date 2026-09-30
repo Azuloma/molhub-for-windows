@@ -65,10 +65,11 @@
                             VerticalAlignment="Center" Background="Transparent" BorderBrush="Transparent"
                             BorderThickness="0" Padding="0" CornerRadius="6" Click="NotificationsButton_Click"
                             ToolTipService.ToolTip="" AutomationProperties.Name="">
-                        <Grid>
-                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEA8F;" FontSize="18" AutomationProperties.AccessibilityView="Raw" />
+                        <Grid Width="32" Height="32">
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEA8F;" FontSize="18"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" AutomationProperties.AccessibilityView="Raw" />
                             <InfoBadge x:Name="NotificationsBadge" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top"
-                                       Margin="0,2,2,0" IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
+                                       Margin="0,1,1,0" IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
                         </Grid>
                         <Button.Flyout>
                             <Flyout x:Name="NotificationsFlyout" Placement="BottomEdgeAlignedRight" ShouldConstrainToRootBounds="False"

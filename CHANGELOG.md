@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.15.1
+
+- Fix: the unread badge no longer covers the title-bar bell; the bell content fills the 32x32 button with the glyph centered and the badge sits in the button's top-right corner.
+
 ## v0.15.0
 
 - Notification center: the title-bar bell shows project activity from the Web `GET /api/v1/notifications` (bridge read `notifications`): work started, work reservation cancelled, work reservation released (by an owner/admin or automatically) and commit published (title · version). Own actions are never included; scope is the projects the account can access; the server keeps 30 days.
@@ -9,7 +13,7 @@
 - Windows toasts (Windows App SDK `AppNotificationManager`, manifest toast activator): only for new items arriving by polling while the main window is not active (deactivated or minimized); never for the startup batch or a reset; 4 or more in one poll give one summary toast. Arguments carry only `action`, `projectId` and `commitId` and are validated on click. A click while running opens the item (or the flyout when it is no longer listed); a launch from a toast when the app was closed starts normally through sign-in. Sign-out stops polling and removes shown toasts before the bridge `logout`. Windows notification settings control toasts.
 - `/api/me` account id is now parsed (bounded); a missing or invalid id only disables notifications.
 - Fix: polling cannot restart while a sign-out is in progress.
-- Not device-tested yet.
+- Device-tested by the owner on 2026-09-30: all manual checks passed; the badge position was fixed in v0.15.1.
 
 ## v0.14.19
 

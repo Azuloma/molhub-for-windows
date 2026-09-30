@@ -111,7 +111,8 @@ Assert(mainXaml.Contains("Spacing=\"12\" VerticalAlignment=\"Center\"", StringCo
 Assert(mainXaml.Contains("KeyboardAcceleratorPlacementMode=\"Hidden\"", StringComparison.Ordinal), "Root shortcut placement hints must be hidden.");
 Assert(mainXaml.Contains("Background=\"Transparent\"", StringComparison.Ordinal) && mainXaml.Contains("CornerRadius=\"16\"", StringComparison.Ordinal), "TitleBar action buttons must be transparent circular chrome.");
 Assert(mainXaml.Contains("Glyph=\"&#xEA8F;\"", StringComparison.Ordinal), "Notifications must retain the Segoe Fluent Ringer glyph.");
-Assert(mainXaml.Contains("Glyph=\"&#xEA8F;\" FontSize=\"18\" AutomationProperties.AccessibilityView=\"Raw\"", StringComparison.Ordinal)
+Assert(mainXaml.Contains("Glyph=\"&#xEA8F;\" FontSize=\"18\"", StringComparison.Ordinal)
+    && mainXaml.Contains("HorizontalAlignment=\"Center\" VerticalAlignment=\"Center\" AutomationProperties.AccessibilityView=\"Raw\"", StringComparison.Ordinal)
     && mainXaml.Contains("x:Name=\"ProfilePicture\"", StringComparison.Ordinal)
     && mainXaml.Contains("DisplayName=\"\" AutomationProperties.AccessibilityView=\"Raw\"", StringComparison.Ordinal), "Decorative title-bar icon and avatar must be hidden from the accessibility tree.");
 Assert(mainXaml.Contains("Width=\"320\" MaxHeight=\"440\"", StringComparison.Ordinal) && mainXaml.Contains("AccountSeparator", StringComparison.Ordinal), "Account flyout must have bounded identity/separator structure.");
@@ -122,6 +123,9 @@ Assert(mainXaml.Contains("x:Name=\"PageSearchBox\"", StringComparison.Ordinal)
 Assert(mainCode.Contains("VirtualKey.N", StringComparison.Ordinal)
     && mainCode.Contains("VirtualKey.Left", StringComparison.Ordinal)
     && mainCode.Contains("VK_OEM_COMMA", StringComparison.Ordinal), "Non-search root shortcuts must remain defined.");
+Assert(mainXaml.Contains("<Grid Width=\"32\" Height=\"32\">", StringComparison.Ordinal)
+    && mainXaml.Contains("x:Name=\"NotificationsBadge\" Visibility=\"Collapsed\" HorizontalAlignment=\"Right\" VerticalAlignment=\"Top\"", StringComparison.Ordinal),
+    "The bell content grid must fill the 32x32 button and the unread badge must sit in its top-right corner.");
 Assert(mainXaml.Contains("x:Name=\"NotificationsButton\" Width=\"32\" Height=\"32\"", StringComparison.Ordinal)
     && mainXaml.Contains("CornerRadius=\"6\"", StringComparison.Ordinal)
     && mainXaml.Contains("x:Name=\"ProfileButton\" Width=\"32\" Height=\"32\"", StringComparison.Ordinal)
@@ -187,12 +191,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.15.0</Version>", StringComparison.Ordinal), "Version source of truth must be v0.15.0.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.15.0.0\"", StringComparison.Ordinal), "Manifest version must be v0.15.0.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.15.1</Version>", StringComparison.Ordinal), "Version source of truth must be v0.15.1.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.15.1.0\"", StringComparison.Ordinal), "Manifest version must be v0.15.1.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.15.0", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.15.0", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.15.0", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.19", StringComparison.Ordinal), "Version documentation must be updated, with v0.15.0 above v0.14.19 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.15.1", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.15.1", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.15.1", StringComparison.Ordinal) < changelogText.IndexOf("## v0.15.0", StringComparison.Ordinal), "Version documentation must be updated, with v0.15.1 above v0.15.0 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -1535,4 +1539,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.15.0 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.15.1 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
