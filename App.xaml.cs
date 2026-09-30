@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppNotifications;
 using Windows.Globalization;
 using Windows.Storage;
 
@@ -10,6 +11,7 @@ public partial class App : Application
     public static Window? LoginWindow { get; private set; }
     private bool _transitioning;
     private bool _signingOut;
+    private Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue;
 
     public App()
     {
@@ -19,7 +21,54 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        RegisterNotifications();
+        // A launch from a toast (ExtendedActivationKind.AppNotification) starts normally through sign-in; its arguments are ignored.
         ShowLoginWindow();
+    }
+
+    private void RegisterNotifications()
+    {
+        try
+        {
+            _uiQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            var manager = AppNotificationManager.Default;
+            manager.NotificationInvoked += Notification_Invoked;
+            manager.Register();
+            NotificationToasts.Registered = true;
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => UnregisterNotifications();
+        }
+        catch
+        {
+            // Toasts stay disabled; the app works without them.
+            NotificationToasts.Registered = false;
+        }
+    }
+
+    private void UnregisterNotifications()
+    {
+        if (!NotificationToasts.Registered) return;
+        NotificationToasts.Registered = false;
+        try
+        {
+            AppNotificationManager.Default.NotificationInvoked -= Notification_Invoked;
+            AppNotificationManager.Default.Unregister();
+        }
+        catch
+        {
+            // Nothing to unregister.
+        }
+    }
+
+    // Arrives off the UI thread: validate, then hand a target to MainWindow on the UI thread.
+    private void Notification_Invoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args)
+    {
+        var target = NotificationToastPolicy.ParseArguments(args.Arguments);
+        if (target is null) return;
+        _uiQueue?.TryEnqueue(() =>
+        {
+            if (_signingOut || MainWindow is not MolHub.Windows.MainWindow main) return;
+            main.HandleToastActivation(target);
+        });
     }
 
     private static void ApplySavedLanguage()
@@ -88,7 +137,11 @@ public partial class App : Application
             return;
         }
 
-        if (!_transitioning && MainWindow is null) Exit();
+        if (!_transitioning && MainWindow is null)
+        {
+            UnregisterNotifications();
+            Exit();
+        }
     }
 
     public static void RequestSignOut()

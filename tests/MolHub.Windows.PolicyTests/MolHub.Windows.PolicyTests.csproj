@@ -29,5 +29,11 @@
     <Compile Include="..\..\Pages\Profile\ProfileModel.cs" Link="ProfileModel.cs" />
     <Compile Include="..\..\Shell\NativePage.cs" Link="NativePage.cs" />
     <Compile Include="..\..\Pages\Common\LoadState.cs" Link="LoadState.cs" />
+    <Compile Include="..\..\Notifications\NotificationItem.cs" Link="NotificationItem.cs" />
+    <Compile Include="..\..\Notifications\NotificationPayloadParser.cs" Link="NotificationPayloadParser.cs" />
+    <Compile Include="..\..\Notifications\NotificationFeed.cs" Link="NotificationFeed.cs" />
+    <Compile Include="..\..\Notifications\NotificationLastSeenPolicy.cs" Link="NotificationLastSeenPolicy.cs" />
+    <Compile Include="..\..\Notifications\NotificationText.cs" Link="NotificationText.cs" />
+    <Compile Include="..\..\Notifications\NotificationToastPolicy.cs" Link="NotificationToastPolicy.cs" />
   </ItemGroup>
 </Project>

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.0
+
+- Notification center: the title-bar bell shows project activity from the Web `GET /api/v1/notifications` (bridge read `notifications`): work started, work reservation cancelled, work reservation released (by an owner/admin or automatically) and commit published (title · version). Own actions are never included; scope is the projects the account can access; the server keeps 30 days.
+- Polling runs every 15 s (server `pollAfter`) only while an approved account is signed in, the data bridge is connected and the main window is open; one request at a time. It honors `hasMore`, `reset` (reload the list and refresh the visible page, no unread, no toasts), 429 `retryAfter`, pauses for maintenance (retry every 60 s, "paused" text), stops on 401/403 and backs off 60 s on other failures. No background or tray activity.
+- Flyout: newest first (up to 100), per-kind icon, sentence, time, accent dot for items unread when opened; loading, empty, not connected, paused and error states. Opening it (click or Alt+N) marks all as seen. Clicking opens the project, or for a published commit the commit on top of its project (Back returns to the project).
+- Unread badge (`InfoBadge`, 99 with the accessible name "99+" for more). The marker is kept per account in local settings as `notifications.lastSeen.<userId>` (a numeric id only); the first run for an account starts with everything read, items that arrived while the app was closed show as unread at the next start, and sign-out keeps the marker.
+- Windows toasts (Windows App SDK `AppNotificationManager`, manifest toast activator): only for new items arriving by polling while the main window is not active (deactivated or minimized); never for the startup batch or a reset; 4 or more in one poll give one summary toast. Arguments carry only `action`, `projectId` and `commitId` and are validated on click. A click while running opens the item (or the flyout when it is no longer listed); a launch from a toast when the app was closed starts normally through sign-in. Sign-out stops polling and removes shown toasts before the bridge `logout`. Windows notification settings control toasts.
+- `/api/me` account id is now parsed (bounded); a missing or invalid id only disables notifications.
+- Fix: polling cannot restart while a sign-out is in progress.
+- Not device-tested yet.
+
 ## v0.14.19
 
 - Dashboard: project names in "Recent commits" and "Activity" are now links that open the project overview (same path as "Top projects"; Back returns to the list), matching the web dashboard.

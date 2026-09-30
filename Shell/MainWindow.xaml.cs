@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Shapes;
 using Microsoft.UI.Windowing;
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -39,6 +40,10 @@ public sealed partial class MainWindow : Window
     private Grid? _bridgeIndicatorHost;
     private StackPanel? _bridgeStatusPanel;
     private bool _signingOut;
+    // Set with _signingOut but kept until MainWindow closes or the sign-out is abandoned, so polling cannot restart meanwhile.
+    private bool _signOutRequested;
+    // False while the window is deactivated or minimized: toasts are shown only then.
+    private bool _windowActive = true;
     // A password change ended the session while another write was still being sent: sign out once the gate is free.
     private bool _signOutWhenGateFree;
     private NativePage _currentPage = NativePage.Dashboard;
@@ -48,11 +53,23 @@ public sealed partial class MainWindow : Window
     private bool _updatingSettings;
     private bool _syncingNavigationSelection;
     private bool _initialNavigationCompleted;
+    // Notification center: polls only while the bridge is connected and an approved account with a known id is signed in.
+    private readonly NotificationPoller _notifications;
+    private bool _notificationsRunning;
+    private bool _notificationsFlyoutOpen;
+    // Ids that were unread when the flyout opened (accent dot); cleared when it closes.
+    private readonly HashSet<long> _unreadSnapshot = [];
 
     public MainWindow(AuthenticatedUser user)
     {
         _user = user;
         InitializeComponent();
+        _notifications = new NotificationPoller(DispatcherQueue, (command, payload) => _bridge.RequestAsync(command, payload));
+        _notifications.Changed += Notifications_Changed;
+        _notifications.PageRefreshRequested += Notifications_PageRefreshRequested;
+        // Toasts come only from items that arrive by polling (never the first load or a reset).
+        _notifications.ItemsArrived += Notifications_ItemsArrived;
+        Activated += MainWindow_Activated;
         Closed += MainWindow_Closed;
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -117,6 +134,12 @@ public sealed partial class MainWindow : Window
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         _themeService.Dispose();
+        _notifications.Changed -= Notifications_Changed;
+        _notifications.PageRefreshRequested -= Notifications_PageRefreshRequested;
+        _notifications.ItemsArrived -= Notifications_ItemsArrived;
+        Activated -= MainWindow_Activated;
+        _notificationsRunning = false;
+        _notifications.Stop();
         _bridge.StateChanged -= Bridge_StateChanged;
         _bridge.Dispose();
     }
@@ -127,6 +150,7 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void Bridge_StateChanged(object? sender, EventArgs e)
     {
+        SyncNotifications();
         switch (_bridge.State)
         {
             case BridgeConnectionState.Connecting:
@@ -229,7 +253,7 @@ public sealed partial class MainWindow : Window
         AutomationProperties.SetName(NotificationsButton, L("Notifications"));
         AutomationProperties.SetName(ProfileButton, accountMenuName);
         NotificationsHeader.Text = L("Notifications");
-        NotificationsEmpty.Text = L("NotConnected");
+        UpdateNotificationsUi();
         AccountName.Text = _user.Username;
         UpdateAccountStatusText();
         foreach (var item in Navigation.MenuItems.OfType<NavigationViewItem>().Concat(Navigation.FooterMenuItems.OfType<NavigationViewItem>()))
@@ -333,9 +357,11 @@ public sealed partial class MainWindow : Window
     /// <summary>A newer session read of the same account (for example pending → rejected) updates the menu and pane.</summary>
     private void UpdateUser(AuthenticatedUser user)
     {
-        _user = user;
+        // A session read that lacks the account id must not stop the notification poller.
+        _user = user with { Id = user.Id ?? _user.Id };
         UpdateAccountStatusText();
         ApplyPageAccess();
+        SyncNotifications();
     }
 
     /// <summary>The approval screen found the same account approved: open the workspace without a new sign-in.</summary>
@@ -571,6 +597,220 @@ public sealed partial class MainWindow : Window
     {
         NavigateTo(NativePage.Projects);
         _projects?.OpenProject(projectId, name);
+    }
+
+    /// <summary>Opens a commit from another place (a notification): Projects with the project underneath for Back.</summary>
+    private void OpenCommit(string projectId, string name, string commitId)
+    {
+        NavigateTo(NativePage.Projects);
+        _projects?.OpenCommit(projectId, name, commitId);
+    }
+
+    // ----- Notification center -----
+
+    /// <summary>Starts or stops the poller so it runs only while the bridge is connected, an approved account with a known id is signed in and no sign-out is under way.</summary>
+    private void SyncNotifications()
+    {
+        var shouldRun = !_signingOut && !_signOutRequested
+            && _bridge.State == BridgeConnectionState.Connected
+            && IsPageAvailable(NativePage.Projects)
+            && _user.Id is not null;
+        if (shouldRun == _notificationsRunning) return;
+        _notificationsRunning = shouldRun;
+        if (shouldRun) _notifications.Start(_user.Id);
+        else _notifications.Stop();
+    }
+
+    private void MainWindow_Activated(object sender, WindowActivatedEventArgs args) =>
+        _windowActive = args.WindowActivationState != WindowActivationState.Deactivated;
+
+    private void Notifications_ItemsArrived(IReadOnlyList<NotificationItem> items) =>
+        NotificationToasts.Show(items, _windowActive, L);
+
+    /// <summary>A toast was clicked while the app runs (already validated by <see cref="NotificationToastPolicy"/>): open the item, or the list when it is no longer known.</summary>
+    internal void HandleToastActivation(ToastTarget target)
+    {
+        if (_signingOut || _signOutRequested) return;
+        try
+        {
+            if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter) presenter.Restore();
+        }
+        catch
+        {
+            // Activate below still brings the window forward.
+        }
+        Activate();
+        NotificationItem? match = null;
+        if (target.Action == ToastAction.Open)
+        {
+            foreach (var item in _notifications.Feed.Items)
+            {
+                if (item.ProjectId != target.ProjectId) continue;
+                if (target.CommitId is not null && item.Commit?.Id != target.CommitId) continue;
+                match = item;
+                break;
+            }
+        }
+        if (match is not null) OpenNotification(match);
+        else ShowHeaderFlyout(NotificationsFlyout, NotificationsButton);
+    }
+
+    private void Notifications_Changed(object? sender, EventArgs e)
+    {
+        // Items that arrive while the flyout is open are shown at once and never counted as unread.
+        if (_notificationsFlyoutOpen && _notifications.Feed.UnreadCount > 0)
+        {
+            SnapshotUnread();
+            _notifications.MarkAllSeen();
+            return;
+        }
+        UpdateNotificationsUi();
+    }
+
+    private void Notifications_PageRefreshRequested(object? sender, EventArgs e)
+    {
+        if (_signingOut) return;
+        // The server reset the cursor: reload what is on screen through the shared stale path.
+        OnWorkChanged();
+        _ = _currentPage switch
+        {
+            NativePage.Dashboard => _dashboard?.EnsureLoadedAsync(),
+            NativePage.Projects => _projects?.EnsureLoadedAsync(),
+            NativePage.CommitHistory => _commitHistory?.EnsureLoadedAsync(),
+            NativePage.ProjectManagement => _management?.EnsureLoadedAsync(),
+            NativePage.Administration => _administration?.EnsureLoadedAsync(),
+            _ => null
+        };
+    }
+
+    private void NotificationsFlyout_Opened(object? sender, object e)
+    {
+        _notificationsFlyoutOpen = true;
+        SnapshotUnread();
+        _notifications.MarkAllSeen();
+    }
+
+    private void NotificationsFlyout_Closed(object? sender, object e)
+    {
+        _notificationsFlyoutOpen = false;
+        _unreadSnapshot.Clear();
+        NotificationsList.Children.Clear();
+    }
+
+    private void SnapshotUnread()
+    {
+        var feed = _notifications.Feed;
+        var seen = feed.LastSeen ?? 0;
+        foreach (var item in feed.Items)
+        {
+            if (item.Id > seen) _unreadSnapshot.Add(item.Id);
+        }
+    }
+
+    /// <summary>Refreshes the bell badge and name, and (while the flyout is open) the status line and the list.</summary>
+    private void UpdateNotificationsUi()
+    {
+        var feed = _notifications.Feed;
+        var count = feed.UnreadCount;
+        var overflow = feed.UnreadOverflow || count > 99;
+        if (count > 0)
+        {
+            // InfoBadge shows numbers only, so 99+ is a "99" badge whose name (below) says "99+".
+            NotificationsBadge.Value = Math.Min(count, 99);
+            NotificationsBadge.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            NotificationsBadge.Visibility = Visibility.Collapsed;
+        }
+        var name = count > 0
+            ? string.Format(L("Notifications_UnreadFormat"), overflow ? "99+" : count.ToString(System.Globalization.CultureInfo.CurrentCulture))
+            : L("Notifications");
+        ToolTipService.SetToolTip(NotificationsButton, name);
+        AutomationProperties.SetName(NotificationsButton, name);
+
+        if (!_notificationsFlyoutOpen) return;
+        var items = feed.Items;
+        var status = _notifications.State switch
+        {
+            NotificationPollerState.Loading => L("Notifications_Loading"),
+            NotificationPollerState.Ready => items.Count == 0 ? L("Notifications_Empty") : null,
+            NotificationPollerState.Paused => L("Notifications_Paused"),
+            NotificationPollerState.Error => L("Notifications_Error"),
+            _ => L("NotConnected")
+        };
+        NotificationsStatus.Text = status ?? string.Empty;
+        NotificationsStatus.Visibility = status is null ? Visibility.Collapsed : Visibility.Visible;
+        NotificationsList.Children.Clear();
+        var language = ReadLanguage();
+        foreach (var item in items) NotificationsList.Children.Add(CreateNotificationRow(item, _unreadSnapshot.Contains(item.Id), language));
+    }
+
+    private Button CreateNotificationRow(NotificationItem item, bool unread, string language)
+    {
+        var sentence = NotificationText.Sentence(item, L);
+        var commitLine = NotificationText.CommitLine(item, L);
+        var time = DashboardModel.FormatDate(item.CreatedAt, language);
+
+        var grid = new Grid { ColumnSpacing = 12 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var icon = new FontIcon
+        {
+            Glyph = NotificationText.Glyph(item.Kind),
+            FontSize = 16,
+            FontFamily = PageParts.SymbolFont,
+            Style = PageParts.Res("DashboardIconStyle"),
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 0, 0)
+        };
+        AutomationProperties.SetAccessibilityView(icon, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+        grid.Children.Add(icon);
+
+        var body = new StackPanel { Spacing = 2 };
+        body.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap });
+        if (commitLine is not null)
+        {
+            body.Children.Add(new TextBlock
+            {
+                Text = commitLine,
+                Style = PageParts.Res("DashboardSecondaryTextStyle"),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxLines = 1
+            });
+        }
+        if (time.Length > 0) body.Children.Add(new TextBlock { Text = time, Style = PageParts.Res("DashboardCaptionTextStyle") });
+        Grid.SetColumn(body, 1);
+        grid.Children.Add(body);
+
+        if (unread)
+        {
+            var dot = new Ellipse { Style = PageParts.Res("NotificationUnreadDotStyle"), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 6, 0, 0) };
+            AutomationProperties.SetAccessibilityView(dot, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+            Grid.SetColumn(dot, 2);
+            grid.Children.Add(dot);
+        }
+
+        var button = new Button { Style = PageParts.Res("NotificationItemButtonStyle"), Content = grid };
+        var parts = new List<string>();
+        if (unread) parts.Add(L("Notifications_UnreadItem"));
+        parts.Add(sentence);
+        if (commitLine is not null) parts.Add(commitLine);
+        if (time.Length > 0) parts.Add(time);
+        AutomationProperties.SetName(button, string.Join(", ", parts));
+        button.Click += (_, _) => OpenNotification(item);
+        return button;
+    }
+
+    /// <summary>A row was clicked: reservation kinds open the project, a published commit opens the commit; nothing happens when Projects is unavailable to this account.</summary>
+    private void OpenNotification(NotificationItem item)
+    {
+        NotificationsFlyout.Hide();
+        if (_signingOut || !IsPageAvailable(NativePage.Projects)) return;
+        if (item.Kind == NotificationKind.CommitPublished && item.Commit is { } commit) OpenCommit(item.ProjectId, item.ProjectName, commit.Id);
+        else OpenProject(item.ProjectId, item.ProjectName);
     }
 
     private FrameworkElement CreateSettingsPage()
@@ -973,9 +1213,13 @@ public sealed partial class MainWindow : Window
             return;
         }
         _signingOut = true;
+        _signOutRequested = true;
         // Same UI-thread turn as the check above: no new write may start while "logout" is awaited (a write that was refused
         // explains the sign-out). The gate stays closed until this window closes, or until an abandoned sign-out reopens it.
         _writeGate.Close();
+        // Stop polling before "logout"; results that arrive later are ignored (generation check).
+        SyncNotifications();
+        NotificationToasts.RemoveAllAsync();
         // Revoke the server session first when the bridge is up; local sign-in data is cleared either way.
         if (_bridge.State == BridgeConnectionState.Connected) await _bridge.RequestAsync("logout");
         App.RequestSignOut();
@@ -983,7 +1227,12 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>The sign-out was abandoned (its login window was closed) and this window stays open: writes may start again.</summary>
-    internal void SignOutAbandoned() => _writeGate.Reopen();
+    internal void SignOutAbandoned()
+    {
+        _writeGate.Reopen();
+        _signOutRequested = false;
+        SyncNotifications();
+    }
 
     /// <summary>
     /// The session already ended on the server (a page's "Sign in again", or a password change that was applied or

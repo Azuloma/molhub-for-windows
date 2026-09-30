@@ -100,6 +100,23 @@
                 <Setter Property="VerticalAlignment" Value="Center" />
             </Style>
 
+            <!-- Notification center rows (title-bar bell flyout). -->
+            <Style x:Key="NotificationItemButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Background" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource SubtleFillColorTransparentBrush}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+                <Setter Property="VerticalContentAlignment" Value="Top" />
+                <Setter Property="Padding" Value="12,10" />
+                <Setter Property="CornerRadius" Value="8" />
+            </Style>
+            <Style x:Key="NotificationUnreadDotStyle" TargetType="Ellipse">
+                <Setter Property="Width" Value="8" />
+                <Setter Property="Height" Value="8" />
+                <Setter Property="Fill" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+            </Style>
+
             <!-- Version info: banner logo, hero texts, channel badge, row icons and the bridge status indicator. -->
             <Style x:Key="VersionBannerImageStyle" TargetType="Image">
                 <Setter Property="Source" Value="{ThemeResource MolHubBannerImage}" />

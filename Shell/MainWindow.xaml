@@ -65,9 +65,14 @@
                             VerticalAlignment="Center" Background="Transparent" BorderBrush="Transparent"
                             BorderThickness="0" Padding="0" CornerRadius="6" Click="NotificationsButton_Click"
                             ToolTipService.ToolTip="" AutomationProperties.Name="">
-                        <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEA8F;" FontSize="18" AutomationProperties.AccessibilityView="Raw" />
+                        <Grid>
+                            <FontIcon FontFamily="{StaticResource SymbolThemeFontFamily}" Glyph="&#xEA8F;" FontSize="18" AutomationProperties.AccessibilityView="Raw" />
+                            <InfoBadge x:Name="NotificationsBadge" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                       Margin="0,2,2,0" IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw" />
+                        </Grid>
                         <Button.Flyout>
                             <Flyout x:Name="NotificationsFlyout" Placement="BottomEdgeAlignedRight" ShouldConstrainToRootBounds="False"
+                                    Opened="NotificationsFlyout_Opened" Closed="NotificationsFlyout_Closed"
                                     FlyoutPresenterStyle="{StaticResource AcrylicFlyoutPresenterStyle}">
                                 <Flyout.SystemBackdrop>
                                     <local:ThinAcrylicBackdrop />
@@ -82,8 +87,11 @@
                                                Style="{StaticResource BodyStrongTextBlockStyle}" FontSize="15" TextTrimming="CharacterEllipsis" />
                                     <Border Grid.Row="1" Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                                        <TextBlock x:Name="NotificationsEmpty" Text="" TextWrapping="Wrap" Margin="20,12,20,16"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Padding="0,0,0,6">
+                                            <TextBlock x:Name="NotificationsStatus" Text="" TextWrapping="Wrap" Margin="20,12,20,16"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            <StackPanel x:Name="NotificationsList" Margin="6,6,6,0" Spacing="2" />
+                                        </StackPanel>
                                     </ScrollViewer>
                                 </Grid>
                             </Flyout>

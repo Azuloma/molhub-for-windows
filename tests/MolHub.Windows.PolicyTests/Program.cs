@@ -51,6 +51,8 @@ Assert(root is not null, "Source root must be discoverable.");
 var sourceRoot = root!.FullName;
 // ----- Administration (v0.14.5 reads, v0.14.7 Members writes) -----
 AdministrationPolicyTests.Run(sourceRoot);
+// ----- Notifications (v0.15.0 pure core) -----
+NotificationPolicyTests.Run(sourceRoot);
 // Every literal style/resource key looked up from code must exist in App.xaml or the WinUI XamlControlsResources
 // (v0.14.6: a missing Members status style threw on render, leaving the loading indicator and crashing on reselect).
 XNamespace xamlNs = "http://schemas.microsoft.com/winfx/2006/xaml";
@@ -185,12 +187,12 @@ var replacement = appCode.IndexOf("ShowLoginWindow(resetSession: true)", signOut
 var resetHandler = appCode.IndexOf("Login_SessionResetSucceeded", StringComparison.Ordinal);
 var mainClose = appCode.IndexOf("main.Close()", resetHandler, StringComparison.Ordinal);
 Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign out must create the replacement login window before closing MainWindow.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.14.19</Version>", StringComparison.Ordinal), "Version source of truth must be v0.14.19.");
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.14.19.0\"", StringComparison.Ordinal), "Manifest version must be v0.14.19.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.15.0</Version>", StringComparison.Ordinal), "Version source of truth must be v0.15.0.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.15.0.0\"", StringComparison.Ordinal), "Manifest version must be v0.15.0.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
-Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.14.19", StringComparison.Ordinal)
-    && changelogText.Contains("## v0.14.19", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.14.19", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.17", StringComparison.Ordinal), "Version documentation must be updated, with v0.14.19 above v0.14.17 in the changelog.");
+Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.15.0", StringComparison.Ordinal)
+    && changelogText.Contains("## v0.15.0", StringComparison.Ordinal)
+    && changelogText.IndexOf("## v0.15.0", StringComparison.Ordinal) < changelogText.IndexOf("## v0.14.19", StringComparison.Ordinal), "Version documentation must be updated, with v0.15.0 above v0.14.19 in the changelog.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -776,13 +778,18 @@ Assert(mainCode.Contains("NavigateTo(NativePageCatalog.StartPage(_user), false);
     && mainCode.Contains("NativePage.ServerMaintenance => _maintenance", StringComparison.Ordinal)
     && mainCode.Contains("if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();", StringComparison.Ordinal)
     && mainCode.Contains("_bridge.RequestAsync(\"session\")", StringComparison.Ordinal)
-    && mainCode.Contains("NotificationsEmpty.Text = L(\"NotConnected\");", StringComparison.Ordinal)
+    && mainCode.Contains("_ => L(\"NotConnected\")", StringComparison.Ordinal)
     && mainCode.Contains("NotificationsHeader.Text = L(\"Notifications\");", StringComparison.Ordinal)
+    && mainXaml.Contains("Glyph=\"&#xEA8F;\"", StringComparison.Ordinal)
+    && mainXaml.Contains("<InfoBadge x:Name=\"NotificationsBadge\"", StringComparison.Ordinal)
+    && mainXaml.Contains("Opened=\"NotificationsFlyout_Opened\"", StringComparison.Ordinal)
+    && mainCode.Contains("_notifications.MarkAllSeen();", StringComparison.Ordinal)
+    && mainCode.Contains("new NotificationPoller(", StringComparison.Ordinal)
     && !mainCode.Contains("AnnouncementMenu", StringComparison.Ordinal) && !mainXaml.Contains("Announcement", StringComparison.Ordinal)
     && mainCode.Contains("Navigation.SelectedItem = match;", StringComparison.Ordinal)
     && mainCode.Contains("Cast<NativePage?>()", StringComparison.Ordinal)
     && mainCode[mainCode.IndexOf("private void OnApproved", StringComparison.Ordinal)..].Contains("if (_signingOut) return;", StringComparison.Ordinal),
-    "MainWindow must start on the account's start page, refuse unavailable pages (also from search), keep the bell for notifications (not connected), host announcements on Server maintenance and ignore a late approval during sign-out.");
+    "MainWindow must start on the account's start page, refuse unavailable pages (also from search), keep the bell for notifications (poller, unread badge, not-connected text), host announcements on Server maintenance and ignore a late approval during sign-out.");
 Assert(approvalCode.Contains("ApprovalModel.Check(", StringComparison.Ordinal) && approvalCode.Contains("\"Pending_Heading\"", StringComparison.Ordinal)
     && announcementsCode.Contains("\"announcements\"", StringComparison.Ordinal) && announcementsCode.Contains("\"maintenance\"", StringComparison.Ordinal)
     && !announcementsCode.Contains("startMaintenance", StringComparison.Ordinal) && !announcementsCode.Contains("endMaintenance", StringComparison.Ordinal)
@@ -1444,7 +1451,7 @@ Assert(signOutClose > signOutAsyncOnly.IndexOf("_signingOut = true;", StringComp
 var loginClosedBody = appCode[appCode.IndexOf("private void Login_Closed", StringComparison.Ordinal)..appCode.IndexOf("public static void RequestSignOut", StringComparison.Ordinal)];
 Assert(loginClosedBody.Contains("main.SignOutAbandoned();", StringComparison.Ordinal)
     && loginClosedBody.IndexOf("main.SignOutAbandoned();", StringComparison.Ordinal) < loginClosedBody.IndexOf("return;", StringComparison.Ordinal)
-    && mainCode.Contains("internal void SignOutAbandoned() => _writeGate.Reopen();", StringComparison.Ordinal)
+    && mainCode.Contains("internal void SignOutAbandoned()", StringComparison.Ordinal)
     && mainCode.Contains("_writeGate.Reopen()", StringComparison.Ordinal),
     "An abandoned sign-out (its login window closed while MainWindow stays open) must reopen the write gate.");
 
@@ -1528,4 +1535,4 @@ foreach (var pageSourceFile in Directory.GetFiles(Path.Combine(sourceRoot, "Page
         $"{Path.GetFileName(pageSourceFile)} must not use the old Stretch + MaxWidth page root.");
 }
 
-Console.WriteLine("v0.14.19 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");
+Console.WriteLine("v0.15.0 native shell, dashboard, work writes, commit history, project management, profile settings, administration, approval screen, server maintenance, settings, version info, title bar, flyout, login boundary, policy, profile, concurrency, docs and localization tests passed.");

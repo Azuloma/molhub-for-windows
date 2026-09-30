@@ -3,8 +3,10 @@
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
          xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows/10"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-         IgnorableNamespaces="uap uap10 rescap">
-  <Identity Name="MolHub.Windows" Publisher="CN=MolHub, OID.2.25.311729368913984317654407730594956997722=1" Version="0.14.19.0" />
+         xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         IgnorableNamespaces="uap uap10 rescap com desktop">
+  <Identity Name="MolHub.Windows" Publisher="CN=MolHub, OID.2.25.311729368913984317654407730594956997722=1" Version="0.15.0.0" />
   <Properties>
     <DisplayName>MolHub for Windows</DisplayName>
     <PublisherDisplayName>MolHub</PublisherDisplayName>
@@ -23,6 +25,18 @@
       <uap:VisualElements AppListEntry="default" DisplayName="MolHub for Windows" Description="MolHub for Windows" Square44x44Logo="Assets\Square44x44Logo.png" Square150x150Logo="Assets\Square150x150Logo.png" BackgroundColor="transparent">
         <uap:DefaultTile Square71x71Logo="Assets\SmallTile.png" Square310x310Logo="Assets\LargeTile.png" Wide310x150Logo="Assets\Wide310x150Logo.png" ShortName="MolHub" />
       </uap:VisualElements>
+      <Extensions>
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="25795B1A-2F3B-4348-80FC-017460C00443" />
+        </desktop:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="MolHub.Windows.exe" Arguments="----AppNotificationActivated:" DisplayName="MolHub notifications">
+              <com:Class Id="25795B1A-2F3B-4348-80FC-017460C00443" DisplayName="MolHub notifications" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
     </Application>
   </Applications>
   <Capabilities>

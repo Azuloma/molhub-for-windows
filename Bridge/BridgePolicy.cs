@@ -64,7 +64,7 @@ public static partial class BridgePolicy
     {
         "session", "maintenance", "dashboard", "search", "announcements", "announcement", "projects", "project",
         "history", "projectCommits", "commit", "profile", "manageProjects", "manageProject", "adminUsers",
-        "adminProjects", "adminAudit", "adminRequests", "adminMaintenance", "adminDiscord"
+        "adminProjects", "adminAudit", "adminRequests", "adminMaintenance", "adminDiscord", "notifications"
     };
 
     private static readonly HashSet<string> WriteCommands = new(StringComparer.Ordinal)

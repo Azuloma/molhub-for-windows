@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace MolHub.Windows;
 
@@ -7,11 +8,20 @@ public sealed record AuthenticatedUser(
     byte[]? AvatarPng,
     string Status,
     string Role,
-    bool ProjectManager);
+    bool ProjectManager,
+    string? Id = null);
 
 /// <summary>Pure, bounded validation for the native login observer.</summary>
-public static class ProfilePayloadParser
+public static partial class ProfilePayloadParser
 {
+    public const int MaxIdLength = 64;
+
+    [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$")]
+    private static partial Regex IdPattern();
+
+    /// <summary>Account/project/commit ids: 1-64 characters of letters, digits, underscore and hyphen; anything else is null.</summary>
+    public static string? NormalizeUserId(string? id) => id is not null && IdPattern().IsMatch(id) ? id : null;
+
     public const int MaxResponseBytes = 256 * 1024;
     public const int MaxAvatarBytes = 32 * 1024;
     public const int MaxUsernameLength = 128;
@@ -76,9 +86,13 @@ public static class ProfilePayloadParser
                 avatar = ParsePngDataUri(avatarValue.GetString());
             }
 
+            // The id only keys the per-account last-seen setting; a missing or invalid id never rejects the sign-in.
+            var userId = user.TryGetProperty("id", out var idValue) && idValue.ValueKind == JsonValueKind.String
+                ? NormalizeUserId(idValue.GetString())
+                : null;
             var projectManager = user.TryGetProperty("project_manager", out var pm)
                 && pm.ValueKind == JsonValueKind.True;
-            return new AuthenticatedUser(username, avatar, status.ToLowerInvariant(), role.ToLowerInvariant(), projectManager);
+            return new AuthenticatedUser(username, avatar, status.ToLowerInvariant(), role.ToLowerInvariant(), projectManager, userId);
         }
         catch (JsonException)
         {

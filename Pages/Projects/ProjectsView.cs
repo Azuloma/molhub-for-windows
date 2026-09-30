@@ -159,6 +159,14 @@ internal sealed partial class ProjectsView : UserControl, IScreenStack
         PushProject(projectId, name);
     }
 
+    /// <summary>Opens a commit directly (for example from a notification): the project overview underneath, so Back returns to it.</summary>
+    public void OpenCommit(string projectId, string projectName, string commitId)
+    {
+        if (!ProjectsModel.IsValidId(projectId) || !ProjectsModel.IsValidId(commitId)) return;
+        OpenProject(projectId, projectName);
+        PushCommit(commitId, ProjectsModel.VersionLabel(string.Empty, commitId));
+    }
+
     private Screen RootScreen() => _root == ProjectsRoot.History ? HistoryScreen() : ListScreen();
 
     private Screen ListScreen() => new(ScreenKind.List, string.Empty, L("Page_Projects")) { Load = () => LoadListAsync(append: false), State = _list };
