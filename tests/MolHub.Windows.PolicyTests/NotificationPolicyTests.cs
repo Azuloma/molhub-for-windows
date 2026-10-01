@@ -177,17 +177,20 @@ internal static class NotificationPolicyTests
         // Step 2 wiring (source assertions).
         var pollerCode = File.ReadAllText(Path.Combine(sourceRoot, "Notifications", "NotificationPoller.cs"));
         var mainCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml.cs"));
+        var signOutCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "SignOutCoordinator.cs"));
+        var centerCode = File.ReadAllText(Path.Combine(sourceRoot, "Notifications", "NotificationCenter.cs"));
         Check(pollerCode.Contains("generation != _generation", StringComparison.Ordinal) && pollerCode.Contains("_generation++", StringComparison.Ordinal)
             && pollerCode.Contains("NotificationFeed.Next(", StringComparison.Ordinal) && pollerCode.Contains("NotificationLastSeenStore.Write", StringComparison.Ordinal),
             "the poller must ignore results of an old generation, decide delays with NotificationFeed.Next and persist last-seen.");
-        var signOutStart = mainCode.IndexOf("private async Task SignOutAsync", StringComparison.Ordinal);
-        var signOutBody = mainCode[signOutStart..];
-        var stopIndex = signOutBody.IndexOf("SyncNotifications();", StringComparison.Ordinal);
+        var signOutStart = signOutCode.IndexOf("public async Task SignOutAsync", StringComparison.Ordinal);
+        var signOutBody = signOutCode[signOutStart..];
+        var stopIndex = signOutBody.IndexOf("_syncNotifications();", StringComparison.Ordinal);
         var logoutIndex = signOutBody.IndexOf("_bridge.RequestAsync(\"logout\")", StringComparison.Ordinal);
         Check(signOutStart >= 0 && stopIndex >= 0 && logoutIndex > stopIndex && signOutBody.IndexOf("_writeGate.Close();", StringComparison.Ordinal) < stopIndex,
             "sign-out must stop the notification poller before the bridge logout.");
-        Check(mainCode.Contains("var shouldRun = !_signingOut", StringComparison.Ordinal) && mainCode.Contains("_notifications.Stop();", StringComparison.Ordinal)
-            && mainCode[mainCode.IndexOf("internal void SignOutAbandoned", StringComparison.Ordinal)..].Contains("SyncNotifications();", StringComparison.Ordinal),
+        Check(centerCode.Contains("var shouldRun = !_isSigningOut()", StringComparison.Ordinal) && centerCode.Contains("_notifications.Stop();", StringComparison.Ordinal)
+            && signOutCode[signOutCode.IndexOf("public void SignOutAbandoned", StringComparison.Ordinal)..].Contains("_syncNotifications();", StringComparison.Ordinal)
+            && mainCode.Contains("            SyncNotifications,", StringComparison.Ordinal),
             "the poller must stop when signing out and restart after an abandoned sign-out.");
         Check(!mainCode.Contains("ReferenceEquals(sender", StringComparison.Ordinal) && !pollerCode.Contains("ReferenceEquals(sender", StringComparison.Ordinal),
             "no ReferenceEquals(sender) checks.");
@@ -245,22 +248,24 @@ internal static class NotificationPolicyTests
         var appCode = File.ReadAllText(Path.Combine(sourceRoot, "App.xaml.cs"));
         Check(appCode.Contains("manager.Register()", StringComparison.Ordinal) && appCode.Contains("AppNotificationManager.Default.Unregister()", StringComparison.Ordinal)
             && appCode.Contains("NotificationInvoked +=", StringComparison.Ordinal), "App must register and unregister AppNotificationManager.");
-        var toastSignOutStart = mainCode.IndexOf("private async Task SignOutAsync", StringComparison.Ordinal);
-        var toastSignOut = mainCode[toastSignOutStart..];
-        var toastStop = toastSignOut.IndexOf("SyncNotifications();", StringComparison.Ordinal);
-        var toastRemove = toastSignOut.IndexOf("NotificationToasts.RemoveAllAsync();", StringComparison.Ordinal);
+        var toastSignOutStart = signOutCode.IndexOf("public async Task SignOutAsync", StringComparison.Ordinal);
+        var toastSignOut = signOutCode[toastSignOutStart..];
+        var toastStop = toastSignOut.IndexOf("_syncNotifications();", StringComparison.Ordinal);
+        var toastRemove = toastSignOut.IndexOf("_clearToasts();", StringComparison.Ordinal);
         var toastLogout = toastSignOut.IndexOf("_bridge.RequestAsync(\"logout\")", StringComparison.Ordinal);
-        Check(toastStop >= 0 && toastRemove > toastStop && toastLogout > toastRemove, "sign-out must remove toasts after the poller stop and before logout.");
-        var syncBody = mainCode[mainCode.IndexOf("private void SyncNotifications()", StringComparison.Ordinal)..];
+        Check(toastStop >= 0 && toastRemove > toastStop && toastLogout > toastRemove && centerCode.Contains("NotificationToasts.RemoveAllAsync();", StringComparison.Ordinal)
+            && mainCode.Contains("() => _notificationCenter?.ClearToasts());", StringComparison.Ordinal), "sign-out must remove toasts after the poller stop and before logout.");
+        Check(mainCode.Contains("private void SyncNotifications() => _notificationCenter.SyncNotifications();", StringComparison.Ordinal), "MainWindow.SyncNotifications must forward to the notification center.");
+        var syncBody = centerCode[centerCode.IndexOf("public void SyncNotifications()", StringComparison.Ordinal)..];
         syncBody = syncBody[..syncBody.IndexOf("_notificationsRunning) return;", StringComparison.Ordinal)];
-        Check(syncBody.Contains("!_signOutRequested", StringComparison.Ordinal), "SyncNotifications must require !_signOutRequested.");
-        var abandoned = mainCode[mainCode.IndexOf("internal void SignOutAbandoned", StringComparison.Ordinal)..];
-        Check(abandoned.IndexOf("_signOutRequested = false;", StringComparison.Ordinal) is var clear and >= 0 && clear < abandoned.IndexOf("SyncNotifications();", StringComparison.Ordinal),
+        Check(syncBody.Contains("!_isSignOutRequested()", StringComparison.Ordinal), "SyncNotifications must require !_isSignOutRequested() (the MainWindow _signOutRequested flag).");
+        var abandoned = signOutCode[signOutCode.IndexOf("public void SignOutAbandoned", StringComparison.Ordinal)..];
+        Check(abandoned.IndexOf("_signOutRequested = false;", StringComparison.Ordinal) is var clear and >= 0 && clear < abandoned.IndexOf("_syncNotifications();", StringComparison.Ordinal),
             "_signOutRequested must be cleared only in SignOutAbandoned, before SyncNotifications.");
-        Check(mainCode.Split("_signOutRequested = false;").Length == 2, "_signOutRequested must be cleared in one place.");
+        Check(signOutCode.Split("_signOutRequested = false;").Length == 2 && !mainCode.Contains("_signOutRequested", StringComparison.Ordinal), "_signOutRequested must be cleared in one place.");
         var toastsCode = File.ReadAllText(Path.Combine(sourceRoot, "Notifications", "NotificationToasts.cs"));
-        Check(mainCode.Contains("_notifications.ItemsArrived += Notifications_ItemsArrived;", StringComparison.Ordinal)
-            && mainCode.Split("NotificationToasts.Show(").Length == 2 && !pollerCode.Contains("NotificationToasts", StringComparison.Ordinal)
+        Check(centerCode.Contains("_notifications.ItemsArrived += Notifications_ItemsArrived;", StringComparison.Ordinal)
+            && centerCode.Split("NotificationToasts.Show(").Length == 2 && !mainCode.Contains("NotificationToasts", StringComparison.Ordinal) && !pollerCode.Contains("NotificationToasts", StringComparison.Ordinal)
             && toastsCode.Contains("SetTag(", StringComparison.Ordinal), "toasts must be shown only from the ItemsArrived subscription.");
         var enResw2 = enResw.Contains("Notifications_ToastSummaryFormat", StringComparison.Ordinal) && jaResw.Contains("Notifications_ToastSummaryFormat", StringComparison.Ordinal);
         Check(enResw2, "the toast summary string must exist in both resw files.");

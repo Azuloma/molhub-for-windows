@@ -72,6 +72,12 @@ foreach (var use in resourceUses)
     Assert(appResourceKeys.Contains(use.Key) || winUiResourceKeys.Contains(use.Key), $"{use.File} looks up resource \"{use.Key}\", which App.xaml does not define.");
 var mainXaml = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml"));
 var mainCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml.cs"));
+var pageHostCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "ShellPageHost.cs"));
+var notificationCenterCode = File.ReadAllText(Path.Combine(sourceRoot, "Notifications", "NotificationCenter.cs"));
+var signOutCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "SignOutCoordinator.cs"));
+var flyoutPlacementCode = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "HeaderFlyoutPlacement.cs"));
+var settingsCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Settings", "SettingsView.cs"));
+var versionInfoCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Settings", "VersionInfoView.cs"));
 var loginXaml = File.ReadAllText(Path.Combine(sourceRoot, "Auth", "LoginWindow.xaml"));
 var loginCode = File.ReadAllText(Path.Combine(sourceRoot, "Auth", "LoginWindow.xaml.cs"));
 var appCode = File.ReadAllText(Path.Combine(sourceRoot, "App.xaml.cs"));
@@ -88,7 +94,7 @@ Assert(!mainXaml.Contains("PaneToggleRequested", StringComparison.Ordinal)
     && !titleBarMarkup.Contains("IsPaneToggleButtonVisible", StringComparison.Ordinal), "TitleBar must not host a duplicate pane toggle.");
 Assert(mainXaml.Contains("<ContentControl x:Name=\"ContentFrame\" HorizontalContentAlignment=\"Stretch\" VerticalContentAlignment=\"Stretch\">", StringComparison.Ordinal)
     && mainXaml.Contains("<EntranceThemeTransition FromHorizontalOffset=\"0\" FromVerticalOffset=\"40\"", StringComparison.Ordinal)
-    && mainCode.Contains("ContentFrame.Content = CreatePlaceholder(page)", StringComparison.Ordinal)
+    && mainCode.Contains("ContentFrame.Content = _pageHost.CreatePlaceholder(page)", StringComparison.Ordinal)
     && !mainCode.Contains("ContentFrame.Navigate", StringComparison.Ordinal), "Section content must animate with the native theme transition without Frame navigation.");
 Assert(mainCode.Contains("private void RootGrid_Loaded", StringComparison.Ordinal)
     && mainCode.Contains("_initialNavigationCompleted = true", StringComparison.Ordinal)
@@ -140,13 +146,17 @@ Assert(mainXaml.Split("<local:ThinAcrylicBackdrop />").Length == 3
 Assert(mainXaml.Contains("<Grid Width=\"360\" MaxHeight=\"440\">", StringComparison.Ordinal)
     && mainXaml.Contains("<ScrollViewer Width=\"320\" MaxHeight=\"440\"", StringComparison.Ordinal), "Notifications must be slightly wider than the 320px account flyout, and both must scroll instead of clipping.");
 Assert(!mainXaml.Contains("WebView2", StringComparison.Ordinal) && !mainCode.Contains("WebView2", StringComparison.Ordinal), "MainWindow must not host WebView2.");
-Assert(mainCode.Contains("CreateSettingsPage", StringComparison.Ordinal) && mainCode.Contains("CreateVersionInfoPage", StringComparison.Ordinal), "Settings and Version info must be functional native pages.");
-Assert(mainCode.Contains("ScrollViewer", StringComparison.Ordinal) && mainCode.Contains("RadioButtons", StringComparison.Ordinal)
-    && mainCode.Contains("LocalSettings", StringComparison.Ordinal) && themeCode.Contains("RequestedTheme", StringComparison.Ordinal), "Settings must be scrollable, native, persisted and theme-aware.");
+Assert(!settingsCode.Contains("WebView2", StringComparison.Ordinal) && !versionInfoCode.Contains("WebView2", StringComparison.Ordinal)
+    && !notificationCenterCode.Contains("WebView2", StringComparison.Ordinal) && !pageHostCode.Contains("WebView2", StringComparison.Ordinal)
+    && !signOutCode.Contains("WebView2", StringComparison.Ordinal) && !flyoutPlacementCode.Contains("WebView2", StringComparison.Ordinal), "The classes split out of MainWindow must not mention WebView2.");
+Assert(settingsCode.Contains("CreateSettingsPage", StringComparison.Ordinal) && versionInfoCode.Contains("CreateVersionInfoPage", StringComparison.Ordinal)
+    && pageHostCode.Contains("_settings.CreateSettingsPage()", StringComparison.Ordinal) && pageHostCode.Contains("_versionInfo.CreateVersionInfoPage()", StringComparison.Ordinal), "Settings and Version info must be functional native pages.");
+Assert(settingsCode.Contains("ScrollViewer", StringComparison.Ordinal) && settingsCode.Contains("RadioButtons", StringComparison.Ordinal)
+    && settingsCode.Contains("LocalSettings", StringComparison.Ordinal) && themeCode.Contains("RequestedTheme", StringComparison.Ordinal), "Settings must be scrollable, native, persisted and theme-aware.");
 Assert(mainCode.Contains("AppWindowTitleBar.IsCustomizationSupported", StringComparison.Ordinal)
     && mainCode.Contains("PreferredHeightOption = TitleBarHeightOption.Tall", StringComparison.Ordinal)
     && !mainCode.Contains("appWindow.TitleBar.Height", StringComparison.Ordinal), "Title bar must request Tall without assigning physical AppWindow pixels to XAML DIP.");
-Assert(mainCode.Contains("SettingsThemeSavedMessage", StringComparison.Ordinal) && mainCode.Contains("SettingsRestartMessage", StringComparison.Ordinal), "Theme and language save feedback must be distinct.");
+Assert(settingsCode.Contains("SettingsThemeSavedMessage", StringComparison.Ordinal) && settingsCode.Contains("SettingsRestartMessage", StringComparison.Ordinal), "Theme and language save feedback must be distinct.");
 Assert(versionCode.Contains("RuntimeInformation.ProcessArchitecture", StringComparison.Ordinal)
     && versionCode.Contains("Package.Current", StringComparison.Ordinal)
     && versionCode.Contains("Dependencies", StringComparison.Ordinal)
@@ -159,12 +169,30 @@ Assert(loginXaml.Contains("WebView2", StringComparison.Ordinal) && loginCode.Con
 Assert(loginXaml.Contains("x:Name=\"RootGrid\"", StringComparison.Ordinal)
     && loginCode.Contains("ThemeService.ReadSavedPreference", StringComparison.Ordinal)
     && loginCode.Contains("_themeService.Apply", StringComparison.Ordinal), "LoginWindow must apply the persisted theme.");
-foreach (var source in new[] { mainXaml, mainCode, loginXaml, loginCode })
+foreach (var source in new[] { mainXaml, mainCode, loginXaml, loginCode, pageHostCode, notificationCenterCode, settingsCode, versionInfoCode, signOutCode, flyoutPlacementCode })
 {
     Assert(!source.Contains("ExecuteScriptAsync", StringComparison.Ordinal), "Script injection is forbidden.");
     Assert(!source.Contains("GetCookies", StringComparison.Ordinal) && !source.Contains("Request.Headers", StringComparison.Ordinal), "Cookie/header extraction is forbidden.");
 }
 Assert(mainCode.Contains("SetTitleBar(AppTitleBar)", StringComparison.Ordinal), "Native title bar must own drag/caption behavior.");
+Assert(File.Exists(Path.Combine(sourceRoot, "Pages", "Settings", "SettingsView.cs")) && File.Exists(Path.Combine(sourceRoot, "Pages", "Settings", "VersionInfoView.cs")), "Settings and Version info views must live in Pages/Settings.");
+foreach (var moved in new[] { "ApplyVersionLayout(", "PersistSetting(", "RollbackSetting(", "CreateSettingsPage(" })
+    Assert(!mainCode.Contains("void " + moved, StringComparison.Ordinal) && !mainCode.Contains("FrameworkElement " + moved, StringComparison.Ordinal) && !mainCode.Contains("bool " + moved, StringComparison.Ordinal), $"MainWindow must not define {moved} after the Settings split.");
+Assert(!mainCode.Contains("private FrameworkElement CreateVersionInfoPage(", StringComparison.Ordinal), "MainWindow must not define CreateVersionInfoPage after the Settings split.");
+Assert(File.Exists(Path.Combine(sourceRoot, "Notifications", "NotificationCenter.cs")), "The notification center must live in Notifications/NotificationCenter.cs.");
+Assert(File.Exists(Path.Combine(sourceRoot, "Shell", "SignOutCoordinator.cs")) && File.Exists(Path.Combine(sourceRoot, "Shell", "HeaderFlyoutPlacement.cs")), "Sign-out and header flyout placement must live in Shell/SignOutCoordinator.cs and Shell/HeaderFlyoutPlacement.cs.");
+foreach (var moved in new[] { "SignOutAsync(", "SignOutWhenGateFree(", "SignOutWhenWritesFinish(", "ShowSignOutBlockedAsync(", "HeaderFlyoutOpensAbove(", "ClientToScreen(" })
+    Assert(!mainCode.Contains("Task " + moved, StringComparison.Ordinal) && !mainCode.Contains("void " + moved, StringComparison.Ordinal) && !mainCode.Contains("bool " + moved, StringComparison.Ordinal), $"MainWindow must not define {moved} after the sign-out split.");
+Assert(!mainCode.Contains("DllImport", StringComparison.Ordinal) && !mainCode.Contains("LibraryImport", StringComparison.Ordinal), "MainWindow must not declare P/Invoke imports.");
+Assert(!mainCode.Contains("_signingOut", StringComparison.Ordinal) && !mainCode.Contains("_signOutRequested", StringComparison.Ordinal) && !mainCode.Contains("_signOutWhenGateFree", StringComparison.Ordinal), "MainWindow must read sign-out state only through the coordinator.");
+Assert(mainCode.Split('\n').Length < 600, "MainWindow.xaml.cs must stay under 600 lines after the split.");
+foreach (var moved in new[] { "CreateNotificationRow(", "UpdateNotificationsUi(", "SnapshotUnread(" })
+    Assert(!mainCode.Contains(moved, StringComparison.Ordinal), $"MainWindow must not define or call {moved} after the NotificationCenter split.");
+Assert(File.Exists(Path.Combine(sourceRoot, "Shell", "ShellPageHost.cs")), "Page creation and caching must live in Shell/ShellPageHost.cs.");
+foreach (var moved in new[] { "CreateDashboardPage(", "CreateProjectsPage(", "CreateCommitHistoryPage(", "CreateApprovalPage(", "CreateManagementPage(", "CreateProfilePage(", "CreateMaintenancePage(", "CreateAdministrationPage(", "CreatePlaceholder(", "void OnWorkChanged(" })
+    Assert(!mainCode.Contains("FrameworkElement " + moved, StringComparison.Ordinal) && !mainCode.Contains("void " + moved.Replace("void ", ""), StringComparison.Ordinal), $"MainWindow must not define {moved} after the ShellPageHost split.");
+Assert(!mainCode.Contains("private DashboardView? _dashboard", StringComparison.Ordinal) && !mainCode.Contains("_dashboard", StringComparison.Ordinal) && pageHostCode.Contains("private DashboardView? _dashboard;", StringComparison.Ordinal),
+    "The cached pages must be owned by ShellPageHost, not MainWindow.");
 Assert(!mainCode.Contains("RightInset", StringComparison.Ordinal), "Manual title bar inset logic must be absent.");
 Assert(!mainCode.Contains("fake", StringComparison.OrdinalIgnoreCase) && !mainXaml.Contains("fake", StringComparison.OrdinalIgnoreCase), "Native shell must not contain fake data.");
 Assert(!loginXaml.Contains("MolHub sign in", StringComparison.Ordinal) && !loginXaml.Contains("Sign in to continue", StringComparison.Ordinal), "Login user-facing strings must come from resources.");
@@ -177,8 +205,8 @@ var closedHandler = loginCode[loginCode.IndexOf("private void LoginWindow_Closed
 Assert(closedHandler.IndexOf("_themeService.Dispose()", StringComparison.Ordinal) >= 0
     && closedHandler.IndexOf("if (_core is not { } core) return;", StringComparison.Ordinal) > closedHandler.IndexOf("_themeService.Dispose()", StringComparison.Ordinal)
     && closedHandler.Contains("core.NavigationStarting -= Core_NavigationStarting", StringComparison.Ordinal), "LoginWindow must always dispose its theme service before conditionally detaching WebView events.");
-Assert(mainCode.Contains("RollbackSetting", StringComparison.Ordinal)
-    && mainCode.Contains("_updatingSettings = true", StringComparison.Ordinal), "Settings save failures must rollback radio selections under a guard.");
+Assert(settingsCode.Contains("RollbackSetting", StringComparison.Ordinal)
+    && settingsCode.Contains("_updatingSettings = true", StringComparison.Ordinal), "Settings save failures must rollback radio selections under a guard.");
 var resetSuccess = loginCode.IndexOf("SessionResetSucceeded?.Invoke", StringComparison.Ordinal);
 var rootNavigate = loginCode.IndexOf("_core.Navigate(NavigationPolicy.AppUrl)", resetSuccess, StringComparison.Ordinal);
 Assert(resetSuccess >= 0 && rootNavigate > resetSuccess, "Root navigation must occur only after profile clearing succeeds.");
@@ -194,9 +222,11 @@ Assert(replacement >= 0 && resetHandler >= 0 && mainClose > resetHandler, "Sign 
 Assert(File.ReadAllText(Path.Combine(sourceRoot, "MolHub.Windows.csproj")).Contains("<Version>0.15.1</Version>", StringComparison.Ordinal), "Version source of truth must be v0.15.1.");
 Assert(File.ReadAllText(Path.Combine(sourceRoot, "Package.appxmanifest")).Contains("Version=\"0.15.1.0\"", StringComparison.Ordinal), "Manifest version must be v0.15.1.");
 var changelogText = File.ReadAllText(Path.Combine(sourceRoot, "CHANGELOG.md"));
+var topChangelogHeading = System.Text.RegularExpressions.Regex.Match(changelogText, @"^## (v\S+)", System.Text.RegularExpressions.RegexOptions.Multiline);
 Assert(File.ReadAllText(Path.Combine(sourceRoot, "VERSION.md")).Contains("v0.15.1", StringComparison.Ordinal)
     && changelogText.Contains("## v0.15.1", StringComparison.Ordinal)
-    && changelogText.IndexOf("## v0.15.1", StringComparison.Ordinal) < changelogText.IndexOf("## v0.15.0", StringComparison.Ordinal), "Version documentation must be updated, with v0.15.1 above v0.15.0 in the changelog.");
+    && topChangelogHeading.Success
+    && System.Text.RegularExpressions.Regex.IsMatch(topChangelogHeading.Groups[1].Value, @"^v0\.15\.1(-dev[1-9][0-9]*)?$"), "Version documentation must name v0.15.1, and the topmost changelog heading must be v0.15.1 or v0.15.1-devN.");
 foreach (var locale in new[] { "en-US", "ja-JP" })
 {
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
@@ -213,14 +243,14 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
         Assert(resource.Contains($"<data name=\"{key}\"", StringComparison.Ordinal), $"Version info string is missing: {key} ({locale})");
     Assert(!resource.Contains("VersionInfoDescription", StringComparison.Ordinal), $"The removed Version info description string must not return: {locale}");
 }
-var versionPageStart = mainCode.IndexOf("private FrameworkElement CreateVersionInfoPage()", StringComparison.Ordinal);
-var versionPageEnd = mainCode.IndexOf("private static RadioButton? FindRadioButton", StringComparison.Ordinal);
+var versionPageStart = versionInfoCode.IndexOf("public FrameworkElement CreateVersionInfoPage()", StringComparison.Ordinal);
+var versionPageEnd = versionInfoCode.Length;
 Assert(versionPageStart >= 0 && versionPageEnd > versionPageStart, "The Version info page code must be discoverable.");
-var versionPageCode = mainCode.Substring(versionPageStart, versionPageEnd - versionPageStart);
+var versionPageCode = versionInfoCode.Substring(versionPageStart, versionPageEnd - versionPageStart);
 Assert(!versionPageCode.Contains("VersionInfoDescription", StringComparison.Ordinal) && !versionPageCode.Contains("TitleTextBlockStyle", StringComparison.Ordinal)
     && !versionPageCode.Contains("Page_Version info", StringComparison.Ordinal), "The Version info page must not add a title or description.");
-foreach (var literal in Regex.Matches(mainCode, @"VersionStyle\(""([^""]+)""\)").Select(match => match.Groups[1].Value).Distinct())
-    Assert(appResourceKeys.Contains(literal) || winUiResourceKeys.Contains(literal), $"MainWindow looks up style \"{literal}\", which App.xaml does not define.");
+foreach (var literal in Regex.Matches(versionInfoCode, @"VersionStyle\(""([^""]+)""\)").Select(match => match.Groups[1].Value).Distinct())
+    Assert(appResourceKeys.Contains(literal) || winUiResourceKeys.Contains(literal), $"VersionInfoView looks up style \"{literal}\", which App.xaml does not define.");
 var appXamlText = File.ReadAllText(Path.Combine(sourceRoot, "App.xaml"));
 Assert(Regex.IsMatch(appXamlText, "x:Key=\"Light\"[\\s\\S]*?MolHubBannerImage\" UriSource=\"ms-appx:///Assets/MolHubBannerOnLight.png\"[\\s\\S]*?x:Key=\"Dark\"[\\s\\S]*?MolHubBannerImage\" UriSource=\"ms-appx:///Assets/MolHubBannerOnDark.png\"[\\s\\S]*?x:Key=\"HighContrast\"[\\s\\S]*?MolHubBannerImage\" UriSource=\"ms-appx:///Assets/MolHubBannerOnDark.png\""),
     "App.xaml must map the banner Light to OnLight and Dark/HighContrast to OnDark.");
@@ -308,7 +338,10 @@ Assert(!FlyoutPlacementPolicy.OpenAbove(197, 1000, 50) && FlyoutPlacementPolicy.
     && !FlyoutPlacementPolicy.OpenAbove(139, 160, 1000) && !FlyoutPlacementPolicy.OpenAbove(440, 100, 60), "Flyouts must open above only when the work area below is too short and there is more room above.");
 Assert(mainCode.Contains("ShowHeaderFlyout(NotificationsFlyout, NotificationsButton)", StringComparison.Ordinal)
     && mainCode.Contains("ShowHeaderFlyout(AccountFlyout, ProfileButton)", StringComparison.Ordinal)
-    && mainCode.Contains("DisplayAreaFallback.Nearest).WorkArea", StringComparison.Ordinal), "Title-bar flyouts must choose their placement from the monitor work area.");
+    && flyoutPlacementCode.Contains("DisplayAreaFallback.Nearest).WorkArea", StringComparison.Ordinal)
+    && flyoutPlacementCode.Contains("FlyoutPlacementPolicy.OpenAbove(", StringComparison.Ordinal)
+    && flyoutPlacementCode.Contains("ClientToScreen(hwnd, ref origin)", StringComparison.Ordinal)
+    && mainCode.Contains("HeaderFlyoutPlacement.Show(this, flyout, target)", StringComparison.Ordinal), "Title-bar flyouts must choose their placement from the monitor work area.");
 
 // Web data bridge: exact document, trusted source, fixed commands, bounded request/result shapes.
 Assert(BridgePolicy.BridgeUri.AbsoluteUri == "https://fusion-ledger.desase0175.workers.dev/webview-bridge", "Bridge must load the canonical extensionless document on the production origin.");
@@ -484,7 +517,7 @@ Assert(System.Text.RegularExpressions.Regex.Matches(bridgeCode, @"private void T
 Assert(loginCode.Contains("IsWebMessageEnabled = false", StringComparison.Ordinal)
     && loginCode.Contains("WebViewProfile.GetEnvironmentAsync()", StringComparison.Ordinal)
     && bridgeCode.Contains("WebViewProfile.GetEnvironmentAsync()", StringComparison.Ordinal), "Sign-in keeps WebMessage disabled and shares the single WebView2 environment with the bridge.");
-var signOutHandler = mainCode[mainCode.IndexOf("private async void SignOut_Click", StringComparison.Ordinal)..];
+var signOutHandler = signOutCode[signOutCode.IndexOf("public async Task SignOutAsync", StringComparison.Ordinal)..];
 Assert(signOutHandler.IndexOf("RequestAsync(\"logout\")", StringComparison.Ordinal) >= 0
     && signOutHandler.IndexOf("RequestAsync(\"logout\")", StringComparison.Ordinal) < signOutHandler.IndexOf("App.RequestSignOut()", StringComparison.Ordinal)
     && mainCode.Contains("_bridge.Dispose()", StringComparison.Ordinal), "Sign-out must revoke the server session through the bridge before clearing local data, and the bridge must close with MainWindow.");
@@ -550,7 +583,7 @@ foreach (var locale in new[] { "en-US", "ja-JP" })
     var resource = File.ReadAllText(Path.Combine(sourceRoot, "Strings", locale, "Resources.resw"));
     foreach (var key in usedKeys) Assert(resource.Contains($"<data name=\"{key}\">", StringComparison.Ordinal), $"Missing dashboard string {key} in {locale}");
 }
-Assert(mainCode.Contains("_bridge.RequestAsync(\"dashboard\")", StringComparison.Ordinal) && mainCode.Contains("if (page == NativePage.Dashboard) return CreateDashboardPage();", StringComparison.Ordinal)
+Assert(pageHostCode.Contains("_bridge.RequestAsync(\"dashboard\")", StringComparison.Ordinal) && pageHostCode.Contains("if (page == NativePage.Dashboard) return CreateDashboardPage();", StringComparison.Ordinal)
     && dashboardCode.Contains("Dashboard_StorageNote", StringComparison.Ordinal)
     && !dashboardCode.Contains("Create project", StringComparison.OrdinalIgnoreCase) && !dashboardCode.Contains("publish:", StringComparison.Ordinal),
     "Dashboard must load through the bridge, keep the storage privacy note and render no actions without a native implementation.");
@@ -568,7 +601,7 @@ Assert(captionCode.Contains("TitleBar.PreferredTheme", StringComparison.Ordinal)
     && captionCode.Contains("TitleBarTheme.UseDefaultAppMode", StringComparison.Ordinal)
     && mainCode.Contains("CaptionButtonTheme.Attach(this, RootGrid)", StringComparison.Ordinal) && loginCode.Contains("CaptionButtonTheme.Attach(this, RootGrid)", StringComparison.Ordinal),
     "System caption buttons must follow the app theme (High Contrast keeps system colors) in both windows.");
-Assert(mainCode.Contains("if (language == ReadLanguage()) return;", StringComparison.Ordinal) && mainCode.Contains("if (theme == ReadTheme()) return;", StringComparison.Ordinal),
+Assert(settingsCode.Contains("if (language == ReadLanguage()) return;", StringComparison.Ordinal) && settingsCode.Contains("if (theme == ReadTheme()) return;", StringComparison.Ordinal),
     "Settings must ignore selections equal to the saved value so opening the page reports no save.");
 
 // ----- Projects (read-only) -----
@@ -656,8 +689,8 @@ Assert(!projectsCode.Contains("startReservation", StringComparison.Ordinal) && !
     && projectsCode.Contains("ProjectsModel.SafeShareUri(uri.AbsoluteUri) is not { } safe", StringComparison.Ordinal)
     && projectsCode.Contains("Launcher.LaunchUriAsync(safe)", StringComparison.Ordinal),
     "The project list/overview code stays read-only (writes live only in ProjectsView.Work.cs), shows the storage note with share links and opens only validated links in the browser.");
-Assert(mainCode.Contains("if (page == NativePage.Projects) return CreateProjectsPage();", StringComparison.Ordinal)
-    && mainCode.Contains("if (CurrentStackPage?.TryGoBack() == true) return;", StringComparison.Ordinal)
+Assert(pageHostCode.Contains("if (page == NativePage.Projects) return CreateProjectsPage();", StringComparison.Ordinal)
+    && mainCode.Contains("if (_pageHost.CurrentStackPage?.TryGoBack() == true) return;", StringComparison.Ordinal)
     && dashboardCode.Contains("_openProject(project.Id, project.Name)", StringComparison.Ordinal),
     "Projects must be the native page, Back must walk its screens and the Dashboard must open projects natively.");
 Assert(projectsCode.Contains("var titleRow = new InlineWrapPanel();", StringComparison.Ordinal)
@@ -695,9 +728,9 @@ Assert(new CommitFilter("", 0, false, "p1").IsActive && !CommitFilter.None.IsAct
     "The project filter lists accessible projects and counts as an active filter.");
 Assert(BridgePolicy.IsKnownCommand("history") && !BridgePolicy.IsWrite("history"), "Commit history must use only the read command history.");
 var historyCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "History", "ProjectsView.History.cs"));
-Assert(mainCode.Contains("if (page == NativePage.CommitHistory) return CreateCommitHistoryPage();", StringComparison.Ordinal)
-    && mainCode.Contains("ProjectsRoot.History", StringComparison.Ordinal)
-    && mainCode.Contains("NativePage.CommitHistory => _commitHistory", StringComparison.Ordinal)
+Assert(pageHostCode.Contains("if (page == NativePage.CommitHistory) return CreateCommitHistoryPage();", StringComparison.Ordinal)
+    && pageHostCode.Contains("ProjectsRoot.History", StringComparison.Ordinal)
+    && pageHostCode.Contains("NativePage.CommitHistory => _commitHistory", StringComparison.Ordinal)
     && historyCode.Contains("\"history\"", StringComparison.Ordinal) && historyCode.Contains("showProject: true", StringComparison.Ordinal)
     && historyCode.Contains("if (page.Summary is not { } summary) return;", StringComparison.Ordinal)
     && historyCode.Contains("onReload: () => stats.Visibility = Visibility.Collapsed", StringComparison.Ordinal)
@@ -779,20 +812,21 @@ var announcementCardCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "C
 var approvalCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Approval", "ApprovalView.cs"));
 Assert(mainCode.Contains("NavigateTo(NativePageCatalog.StartPage(_user), false);", StringComparison.Ordinal)
     && mainCode.Contains("if (!NativePageCatalog.IsAvailable(page, _user)) return;", StringComparison.Ordinal)
-    && mainCode.Contains("NativePage.ServerMaintenance => _maintenance", StringComparison.Ordinal)
-    && mainCode.Contains("if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();", StringComparison.Ordinal)
-    && mainCode.Contains("_bridge.RequestAsync(\"session\")", StringComparison.Ordinal)
-    && mainCode.Contains("_ => L(\"NotConnected\")", StringComparison.Ordinal)
+    && pageHostCode.Contains("NativePage.ServerMaintenance => _maintenance", StringComparison.Ordinal)
+    && pageHostCode.Contains("if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();", StringComparison.Ordinal)
+    && pageHostCode.Contains("_bridge.RequestAsync(\"session\")", StringComparison.Ordinal)
+    && notificationCenterCode.Contains("_ => L(\"NotConnected\")", StringComparison.Ordinal)
     && mainCode.Contains("NotificationsHeader.Text = L(\"Notifications\");", StringComparison.Ordinal)
     && mainXaml.Contains("Glyph=\"&#xEA8F;\"", StringComparison.Ordinal)
     && mainXaml.Contains("<InfoBadge x:Name=\"NotificationsBadge\"", StringComparison.Ordinal)
     && mainXaml.Contains("Opened=\"NotificationsFlyout_Opened\"", StringComparison.Ordinal)
-    && mainCode.Contains("_notifications.MarkAllSeen();", StringComparison.Ordinal)
-    && mainCode.Contains("new NotificationPoller(", StringComparison.Ordinal)
+    && notificationCenterCode.Contains("_notifications.MarkAllSeen();", StringComparison.Ordinal)
+    && notificationCenterCode.Contains("new NotificationPoller(", StringComparison.Ordinal)
+    && mainCode.Contains("new NotificationCenter(", StringComparison.Ordinal)
     && !mainCode.Contains("AnnouncementMenu", StringComparison.Ordinal) && !mainXaml.Contains("Announcement", StringComparison.Ordinal)
     && mainCode.Contains("Navigation.SelectedItem = match;", StringComparison.Ordinal)
     && mainCode.Contains("Cast<NativePage?>()", StringComparison.Ordinal)
-    && mainCode[mainCode.IndexOf("private void OnApproved", StringComparison.Ordinal)..].Contains("if (_signingOut) return;", StringComparison.Ordinal),
+    && mainCode[mainCode.IndexOf("private void OnApproved", StringComparison.Ordinal)..].Contains("if (_signOut.IsSigningOut) return;", StringComparison.Ordinal),
     "MainWindow must start on the account's start page, refuse unavailable pages (also from search), keep the bell for notifications (poller, unread badge, not-connected text), host announcements on Server maintenance and ignore a late approval during sign-out.");
 Assert(approvalCode.Contains("ApprovalModel.Check(", StringComparison.Ordinal) && approvalCode.Contains("\"Pending_Heading\"", StringComparison.Ordinal)
     && announcementsCode.Contains("\"announcements\"", StringComparison.Ordinal) && announcementsCode.Contains("\"maintenance\"", StringComparison.Ordinal)
@@ -873,7 +907,7 @@ Assert(!File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Dashboard", "Dashboa
     && !File.ReadAllText(Path.Combine(sourceRoot, "Pages", "History", "ProjectsView.History.cs")).Contains("History_Intro", StringComparison.Ordinal)
     && !managementCode.Contains("\"Page_Project management\"", StringComparison.Ordinal) && !managementCode.Contains("Manage_Intro", StringComparison.Ordinal),
     "Dashboard, Projects, Commit history and Project management must not add a page title (or the management intro) to their content.");
-Assert(mainCode.Contains("if (page == NativePage.ProjectManagement) return CreateManagementPage();", StringComparison.Ordinal)
+Assert(pageHostCode.Contains("if (page == NativePage.ProjectManagement) return CreateManagementPage();", StringComparison.Ordinal)
     && mainXaml.Contains("Tag=\"ProjectManagement\"", StringComparison.Ordinal)
     && managementCode.Contains("\"manageProjects\"", StringComparison.Ordinal) && managementCode.Contains("\"manageProject\"", StringComparison.Ordinal)
     && new[] { "addMember", "removeMember", "releaseReservation", "requestProjectChange", "linkProjectDiscord", "disableProjectDiscord", "assignProjectOwner" }.All(w => managementCode.Contains($"\"{w}\"", StringComparison.Ordinal))
@@ -884,7 +918,7 @@ Assert(managementCode.Contains("if (!_gate.TryEnter())", StringComparison.Ordina
     && managementCode.Contains("LoadDetailAsync(_detailLoad.Begin(), keepContent: true)", StringComparison.Ordinal)
     && managementCode.Contains("DefaultButton = ContentDialogButton.Close", StringComparison.Ordinal)
     && System.Text.RegularExpressions.Regex.Matches(managementCode, "await ConfirmAsync\\(").Count == 3
-    && System.Text.RegularExpressions.Regex.IsMatch(mainCode, @"new ManagementView\([^;]*_writeGate,\s*OnWorkChanged\);"),
+    && System.Text.RegularExpressions.Regex.IsMatch(pageHostCode, @"new ManagementView\([^;]*_writeGate,\s*OnWorkChanged\);"),
     "Management writes share the app-wide write gate, confirm remove/release/stop (Cancel default), reload the project and explain the answer.");
 var projectsStackCode = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.cs"))
     + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "ProjectsView.Work.cs"))
@@ -1050,11 +1084,11 @@ Assert(new[] { "startReservation", "cancelReservation", "publishCommit" }.All(c 
     && workCode.Contains("_stickyNotice = notice.Severity is InfoBarSeverity.Warning or InfoBarSeverity.Error;", StringComparison.Ordinal)
     && projectsCode.Contains("ShowPendingWriteNotice();", StringComparison.Ordinal) && projectsCode.Contains("if (!_stickyNotice) _statusBar.IsOpen = false;", StringComparison.Ordinal)
     && projectsCode.Contains("if (!screen.State.IsCurrent(ticket)) return true;", StringComparison.Ordinal)
-    && System.Text.RegularExpressions.Regex.Matches(mainCode, "_writeGate\\);").Count == 2
+    && System.Text.RegularExpressions.Regex.Matches(pageHostCode, "_writeGate\\);").Count == 2
     && workCode.Contains("Style = PageParts.Res(\"DefaultContentDialogStyle\")", StringComparison.Ordinal)
     && !System.Text.RegularExpressions.Regex.IsMatch(workCode, "[\uE000-\uF8FF]") && !workCode.Contains("GLYPH_", StringComparison.Ordinal)
     && dashboardCode.Contains("_openPublish(project.Id, project.Name)", StringComparison.Ordinal)
-    && mainCode.Contains("OnWorkChanged", StringComparison.Ordinal),
+    && pageHostCode.Contains("OnWorkChanged", StringComparison.Ordinal),
     "Writes send each command once (no automatic resend), confirm before publishing (Cancel is the default), show the storage note, and the Dashboard opens the publish form.");
 var workKeys = System.Text.RegularExpressions.Regex.Matches(workCode + File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Projects", "WorkModel.cs")) + dashboardCode, "\"(Work_[A-Za-z0-9]+)\"").Select(m => m.Groups[1].Value).Distinct().ToList();
 Assert(workKeys.Count >= 40, "Write strings must be found in the source.");
@@ -1166,12 +1200,12 @@ Assert(BridgePolicy.IsKnownCommand("profile") && !BridgePolicy.IsWrite("profile"
 // Gating: unavailable for pending accounts, no longer the generic placeholder.
 Assert(!NativePageCatalog.IsAvailable(NativePage.ProfileSettings, pendingUser) && NativePageCatalog.IsAvailable(NativePage.ProfileSettings, approvedMember),
     "Profile settings must stay unavailable to pending accounts and available once approved.");
-Assert(mainCode.Contains("if (page == NativePage.ProfileSettings) return CreateProfilePage();", StringComparison.Ordinal)
-    && mainCode.Contains("new ProfileView(L,", StringComparison.Ordinal),
+Assert(pageHostCode.Contains("if (page == NativePage.ProfileSettings) return CreateProfilePage();", StringComparison.Ordinal)
+    && pageHostCode.Contains("new ProfileView(L,", StringComparison.Ordinal),
     "Profile settings must build the real ProfileView instead of falling through to the generic placeholder.");
 
 // Sign-out is blocked while a write is in flight, and only revokes the session through the bridge after that check.
-var signOutAsyncBody = mainCode[mainCode.IndexOf("private async Task SignOutAsync", StringComparison.Ordinal)..];
+var signOutAsyncBody = signOutCode[signOutCode.IndexOf("public async Task SignOutAsync", StringComparison.Ordinal)..];
 var inFlightCheck = signOutAsyncBody.IndexOf("_writeGate.InFlight", StringComparison.Ordinal);
 var logoutRequest = signOutAsyncBody.IndexOf("RequestAsync(\"logout\")", StringComparison.Ordinal);
 Assert(inFlightCheck >= 0 && logoutRequest > inFlightCheck, "Sign-out must check the write gate before asking the bridge to log out.");
@@ -1387,27 +1421,27 @@ Assert(!pageSourceText.Contains("_gate.InFlight", StringComparison.Ordinal) && !
 
 
 // ----- Sign-out when the session already ended (password change, "Sign in again") waits for the gate instead of showing the blocked dialog -----
-var signOutWhenWritesFinishBody = mainCode[mainCode.IndexOf("private void SignOutWhenWritesFinish", StringComparison.Ordinal)..
-    mainCode.IndexOf("private void SignOutWhenGateFree", StringComparison.Ordinal)];
+var signOutWhenWritesFinishBody = signOutCode[signOutCode.IndexOf("public void SignOutWhenWritesFinish", StringComparison.Ordinal)..
+    signOutCode.IndexOf("private void SignOutWhenGateFree", StringComparison.Ordinal)];
 Assert(signOutWhenWritesFinishBody.Contains("_writeGate.Released += SignOutWhenGateFree;", StringComparison.Ordinal)
     && !signOutWhenWritesFinishBody.Contains("ShowSignOutBlockedAsync", StringComparison.Ordinal),
     "A sign-out after the session ended must wait for the write gate to free up, never show the 'another change is being sent' dialog.");
 Assert(signOutWhenWritesFinishBody.Contains("if (_signOutWhenGateFree) return;", StringComparison.Ordinal)
     && signOutWhenWritesFinishBody.Contains("_ = SignOutAsync();", StringComparison.Ordinal),
     "The deferred sign-out must subscribe only once, and sign out directly when no write is in flight.");
-Assert(mainCode.Contains("private void SignOutWhenGateFree", StringComparison.Ordinal)
-    && mainCode.Contains("_writeGate.Released -= SignOutWhenGateFree;", StringComparison.Ordinal)
-    && !mainCode.Contains("SignOutAfterPasswordChange", StringComparison.Ordinal),
+Assert(signOutCode.Contains("private void SignOutWhenGateFree", StringComparison.Ordinal)
+    && signOutCode.Contains("_writeGate.Released -= SignOutWhenGateFree;", StringComparison.Ordinal)
+    && !mainCode.Contains("SignOutAfterPasswordChange", StringComparison.Ordinal) && !signOutCode.Contains("SignOutAfterPasswordChange", StringComparison.Ordinal),
     "The queued sign-out must unsubscribe once it runs; the old SignOutAfterPasswordChange name must be gone.");
-var signOutWhenGateFreeStart = mainCode.IndexOf("private void SignOutWhenGateFree", StringComparison.Ordinal);
-var signOutWhenGateFreeBody = mainCode[signOutWhenGateFreeStart..mainCode.IndexOf("private async Task ShowSignOutBlockedAsync", signOutWhenGateFreeStart, StringComparison.Ordinal)];
+var signOutWhenGateFreeStart = signOutCode.IndexOf("private void SignOutWhenGateFree", StringComparison.Ordinal);
+var signOutWhenGateFreeBody = signOutCode[signOutWhenGateFreeStart..signOutCode.IndexOf("private async Task ShowSignOutBlockedAsync", signOutWhenGateFreeStart, StringComparison.Ordinal)];
 Assert(signOutWhenGateFreeBody.Contains("_writeGate.Released -= SignOutWhenGateFree;", StringComparison.Ordinal)
     && signOutWhenGateFreeBody.Contains("_signOutWhenGateFree = false;", StringComparison.Ordinal)
-    && signOutWhenGateFreeBody.Contains("if (!DispatcherQueue.TryEnqueue(SignOutWhenWritesFinish)) SignOutWhenWritesFinish();", StringComparison.Ordinal)
+    && signOutWhenGateFreeBody.Contains("if (!_dispatcher.TryEnqueue(SignOutWhenWritesFinish)) SignOutWhenWritesFinish();", StringComparison.Ordinal)
     && !signOutWhenGateFreeBody.Contains("SignOutAsync", StringComparison.Ordinal),
     "Released fires inside the finishing write's finally, so the queued sign-out must unsubscribe, reset its flag and queue SignOutWhenWritesFinish (re-checking the gate, direct call if TryEnqueue fails), never SignOutAsync.");
 // Every page's "Sign in again" (session already ended on the server) uses SignOutWhenWritesFinish, never the refusing path.
-Assert(!mainCode.Contains("() => _ = SignOutAsync()", StringComparison.Ordinal),
+Assert(!mainCode.Contains("() => _ = SignOutAsync()", StringComparison.Ordinal) && !pageHostCode.Contains("() => _ = SignOutAsync()", StringComparison.Ordinal),
     "No page may be wired with () => _ = SignOutAsync(); 'Sign in again' must use SignOutWhenWritesFinish.");
 foreach (var (signInFactory, signInNext) in new[]
 {
@@ -1419,25 +1453,25 @@ foreach (var (signInFactory, signInNext) in new[]
     ("private FrameworkElement CreateProfilePage", "private FrameworkElement CreateMaintenancePage"),
 })
 {
-    var signInStart = mainCode.IndexOf(signInFactory, StringComparison.Ordinal);
-    var signInEnd = mainCode.IndexOf(signInNext, StringComparison.Ordinal);
-    Assert(signInStart >= 0 && signInEnd > signInStart && mainCode[signInStart..signInEnd].Contains("SignOutWhenWritesFinish", StringComparison.Ordinal)
-        && !mainCode[signInStart..signInEnd].Contains("SignOutAsync", StringComparison.Ordinal),
+    var signInStart = pageHostCode.IndexOf(signInFactory, StringComparison.Ordinal);
+    var signInEnd = pageHostCode.IndexOf(signInNext, StringComparison.Ordinal);
+    Assert(signInStart >= 0 && signInEnd > signInStart && pageHostCode[signInStart..signInEnd].Contains("_signOutWhenWritesFinish", StringComparison.Ordinal)
+        && !pageHostCode[signInStart..signInEnd].Contains("SignOutAsync", StringComparison.Ordinal),
         $"{signInFactory} must wire 'Sign in again' to SignOutWhenWritesFinish, not SignOutAsync.");
 }
-var maintenanceFactoryStart = mainCode.IndexOf("private FrameworkElement CreateMaintenancePage", StringComparison.Ordinal);
-var maintenanceFactory = mainCode[maintenanceFactoryStart..mainCode.IndexOf("return _maintenance;", maintenanceFactoryStart, StringComparison.Ordinal)];
-Assert(maintenanceFactory.Contains("SignOutWhenWritesFinish", StringComparison.Ordinal) && !maintenanceFactory.Contains("SignOutAsync", StringComparison.Ordinal),
+var maintenanceFactoryStart = pageHostCode.IndexOf("private FrameworkElement CreateMaintenancePage", StringComparison.Ordinal);
+var maintenanceFactory = pageHostCode[maintenanceFactoryStart..pageHostCode.IndexOf("return _maintenance;", maintenanceFactoryStart, StringComparison.Ordinal)];
+Assert(maintenanceFactory.Contains("_signOutWhenWritesFinish", StringComparison.Ordinal) && !maintenanceFactory.Contains("SignOutAsync", StringComparison.Ordinal),
     "CreateMaintenancePage must wire 'Sign in again' to SignOutWhenWritesFinish, not SignOutAsync.");
-var profileFactoryStart = mainCode.IndexOf("private FrameworkElement CreateProfilePage", StringComparison.Ordinal);
-var profileFactory = mainCode[profileFactoryStart..mainCode.IndexOf("private FrameworkElement CreateMaintenancePage", StringComparison.Ordinal)];
-Assert(System.Text.RegularExpressions.Regex.Matches(profileFactory, "SignOutWhenWritesFinish").Count == 2,
+var profileFactoryStart = pageHostCode.IndexOf("private FrameworkElement CreateProfilePage", StringComparison.Ordinal);
+var profileFactory = pageHostCode[profileFactoryStart..pageHostCode.IndexOf("private FrameworkElement CreateMaintenancePage", StringComparison.Ordinal)];
+Assert(System.Text.RegularExpressions.Regex.Matches(profileFactory, "_signOutWhenWritesFinish").Count == 2,
     "ProfileView must get SignOutWhenWritesFinish for both its sign-in-again and sign-out-after-password-change callbacks.");
 // The account menu's own Sign out still refuses (explains) while a write is in flight.
-var signOutClickBody = mainCode[mainCode.IndexOf("private async void SignOut_Click", StringComparison.Ordinal)..mainCode.IndexOf("private async Task SignOutAsync", StringComparison.Ordinal)];
-Assert(signOutClickBody.Contains("await SignOutAsync();", StringComparison.Ordinal) && !signOutClickBody.Contains("SignOutWhenWritesFinish", StringComparison.Ordinal),
+var signOutClickBody = mainCode[mainCode.IndexOf("private async void SignOut_Click", StringComparison.Ordinal)..mainCode.IndexOf("internal void SignOutAbandoned", StringComparison.Ordinal)];
+Assert(signOutClickBody.Contains("await _signOut.SignOutAsync();", StringComparison.Ordinal) && !signOutClickBody.Contains("SignOutWhenWritesFinish", StringComparison.Ordinal),
     "The account-menu Sign out must go through SignOutAsync, not the deferred path.");
-var signOutAsyncOnly = mainCode[mainCode.IndexOf("private async Task SignOutAsync", StringComparison.Ordinal)..mainCode.IndexOf("private void SignOutWhenWritesFinish", StringComparison.Ordinal)];
+var signOutAsyncOnly = signOutCode[signOutCode.IndexOf("public async Task SignOutAsync", StringComparison.Ordinal)..signOutCode.IndexOf("public void SignOutAbandoned", StringComparison.Ordinal)];
 Assert(signOutAsyncOnly.Contains("if (_writeGate.InFlight)", StringComparison.Ordinal)
     && signOutAsyncOnly.IndexOf("await ShowSignOutBlockedAsync();", StringComparison.Ordinal) > signOutAsyncOnly.IndexOf("if (_writeGate.InFlight)", StringComparison.Ordinal)
     && signOutAsyncOnly.IndexOf("_signingOut = true;", StringComparison.Ordinal) > signOutAsyncOnly.IndexOf("await ShowSignOutBlockedAsync();", StringComparison.Ordinal),
@@ -1455,8 +1489,9 @@ Assert(signOutClose > signOutAsyncOnly.IndexOf("_signingOut = true;", StringComp
 var loginClosedBody = appCode[appCode.IndexOf("private void Login_Closed", StringComparison.Ordinal)..appCode.IndexOf("public static void RequestSignOut", StringComparison.Ordinal)];
 Assert(loginClosedBody.Contains("main.SignOutAbandoned();", StringComparison.Ordinal)
     && loginClosedBody.IndexOf("main.SignOutAbandoned();", StringComparison.Ordinal) < loginClosedBody.IndexOf("return;", StringComparison.Ordinal)
-    && mainCode.Contains("internal void SignOutAbandoned()", StringComparison.Ordinal)
-    && mainCode.Contains("_writeGate.Reopen()", StringComparison.Ordinal),
+    && mainCode.Contains("internal void SignOutAbandoned() => _signOut.SignOutAbandoned();", StringComparison.Ordinal)
+    && signOutCode.Contains("public void SignOutAbandoned()", StringComparison.Ordinal)
+    && signOutCode.Contains("_writeGate.Reopen()", StringComparison.Ordinal),
     "An abandoned sign-out (its login window closed while MainWindow stays open) must reopen the write gate.");
 
 // ----- ProfileView: a write's own reload is exempt from the write-in-progress guard, and the icon change always reaches MainWindow -----

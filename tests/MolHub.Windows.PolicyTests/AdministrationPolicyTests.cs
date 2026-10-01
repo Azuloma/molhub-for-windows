@@ -15,7 +15,7 @@ internal static class AdministrationPolicyTests
         var view = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Administration", "AdministrationView.cs"));
         var model = File.ReadAllText(Path.Combine(sourceRoot, "Pages", "Administration", "AdministrationModel.cs"));
         var administrationCode = string.Join("\r\n", Directory.GetFiles(Path.Combine(sourceRoot, "Pages", "Administration"), "*.cs").Select(File.ReadAllText));
-        var shell = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "MainWindow.xaml.cs"));
+        var shell = File.ReadAllText(Path.Combine(sourceRoot, "Shell", "ShellPageHost.cs"));
         Check(view.Contains("PageParts.CenteredPage(root, 1280)", StringComparison.Ordinal), "page must use the centered 1280-DIP column.");
         Check(view.Contains("result = command is null ? null : await _request(command, payload);", StringComparison.Ordinal)
             && view.Contains("if (result is null)", StringComparison.Ordinal)

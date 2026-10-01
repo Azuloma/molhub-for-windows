@@ -142,9 +142,9 @@ internal static class AdminUserWritePolicyTests
             && Regex.Matches(administrationCode, @"_gate\.TryEnter\(\)").Count == 1 && Regex.Matches(administrationCode, @"_gate\.Exit\(\);").Count == 1
             && run.IndexOf("_gate.Exit();", StringComparison.Ordinal) > run.IndexOf("finally", StringComparison.Ordinal),
             "Members writes use the app-wide gate once per action and always release it.");
-        Check(Regex.IsMatch(shell, @"new AdministrationView\([^;]*\(\) => _user,\s*_writeGate,\s*OnWorkChanged\);")
+        Check(Regex.IsMatch(shell, @"new AdministrationView\([^;]*_getUser,\s*_writeGate,\s*OnWorkChanged\);")
             && main.Contains("Func<AuthenticatedUser> currentUser, WriteGate gate, Action workChanged", StringComparison.Ordinal),
-            "MainWindow passes the signed-in user, the shared WriteGate and OnWorkChanged.");
+            "ShellPageHost passes the signed-in user, the shared WriteGate and OnWorkChanged.");
         var confirm = run.IndexOf("await ConfirmMemberActionAsync(member, action)", StringComparison.Ordinal);
         var enter = run.IndexOf("_gate.TryEnter()", StringComparison.Ordinal);
         var send = run.IndexOf("await _request(AdminUserWriteModel.Command(action), payload)", StringComparison.Ordinal);

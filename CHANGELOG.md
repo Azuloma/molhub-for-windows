@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.15.1-dev1
+
+- Internal: split the main window into focused classes (Settings and Version info pages, notification center, page host, sign-out coordinator, header flyout placement); no behavior change.
+
 ## v0.15.1
 
 - Fix: the unread badge no longer covers the title-bar bell; the bell content fills the 32x32 button with the glyph centered and the badge sits in the button's top-right corner.

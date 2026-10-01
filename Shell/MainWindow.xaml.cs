@@ -24,51 +24,67 @@ public sealed partial class MainWindow : Window
     private readonly Stack<NativePage> _history = new();
     private readonly ThemeService _themeService = new();
     private readonly WebBridgeClient _bridge = new();
-    private DashboardView? _dashboard;
-    private ProjectsView? _projects;
-    private ProjectsView? _commitHistory;
-    private ApprovalView? _approval;
-    private MaintenanceView? _maintenance;
-    private ManagementView? _management;
-    private ProfileView? _profile;
-    private AdministrationView? _administration;
     // One write at a time for the whole app (Projects, Commit history, Project management and Profile settings).
     private readonly WriteGate _writeGate = new();
-    private string _bridgeStatusKey = "BridgeConnecting";
-    private TextBlock? _bridgeStatusText;
-    private TextBlock? _bridgeStatusDetailText;
-    private Grid? _bridgeIndicatorHost;
-    private StackPanel? _bridgeStatusPanel;
-    private bool _signingOut;
-    // Set with _signingOut but kept until MainWindow closes or the sign-out is abandoned, so polling cannot restart meanwhile.
-    private bool _signOutRequested;
     // False while the window is deactivated or minimized: toasts are shown only then.
     private bool _windowActive = true;
-    // A password change ended the session while another write was still being sent: sign out once the gate is free.
-    private bool _signOutWhenGateFree;
+    // Sign-out sequence and write waiting (see SignOutCoordinator).
+    private readonly SignOutCoordinator _signOut;
     private NativePage _currentPage = NativePage.Dashboard;
-    private RadioButtons? _languageOptions;
-    private RadioButtons? _themeOptions;
-    private InfoBar? _settingsInfoBar;
-    private bool _updatingSettings;
+    // Page creation, caching and data invalidation (see ShellPageHost).
+    private readonly ShellPageHost _pageHost;
     private bool _syncingNavigationSelection;
     private bool _initialNavigationCompleted;
     // Notification center: polls only while the bridge is connected and an approved account with a known id is signed in.
-    private readonly NotificationPoller _notifications;
-    private bool _notificationsRunning;
-    private bool _notificationsFlyoutOpen;
-    // Ids that were unread when the flyout opened (accent dot); cleared when it closes.
-    private readonly HashSet<long> _unreadSnapshot = [];
+    private readonly NotificationCenter _notificationCenter;
 
     public MainWindow(AuthenticatedUser user)
     {
         _user = user;
+        _signOut = new SignOutCoordinator(
+            _writeGate,
+            _bridge,
+            DispatcherQueue,
+            L,
+            () => RootGrid.XamlRoot,
+            () => RootGrid.ActualTheme,
+            SyncNotifications,
+            () => _notificationCenter?.ClearToasts());
+        _pageHost = new ShellPageHost(
+            L,
+            () => _user,
+            () => _currentPage,
+            _bridge,
+            _writeGate,
+            () => _signOut.SignOutWhenWritesFinish(),
+            UpdateBackButton,
+            page => NavigateTo(page),
+            OnApproved,
+            UpdateUser,
+            () => WindowNative.GetWindowHandle(this),
+            OnAvatarChanged,
+            ApplySavedTheme);
         InitializeComponent();
-        _notifications = new NotificationPoller(DispatcherQueue, (command, payload) => _bridge.RequestAsync(command, payload));
-        _notifications.Changed += Notifications_Changed;
-        _notifications.PageRefreshRequested += Notifications_PageRefreshRequested;
-        // Toasts come only from items that arrive by polling (never the first load or a reset).
-        _notifications.ItemsArrived += Notifications_ItemsArrived;
+        _notificationCenter = new NotificationCenter(
+            DispatcherQueue,
+            (command, payload) => _bridge.RequestAsync(command, payload),
+            L,
+            NotificationsBadge,
+            NotificationsButton,
+            NotificationsFlyout,
+            NotificationsStatus,
+            NotificationsList,
+            () => _signOut.IsSigningOut,
+            () => _signOut.IsSignOutRequested,
+            () => _windowActive,
+            () => _bridge.State == BridgeConnectionState.Connected,
+            () => IsPageAvailable(NativePage.Projects),
+            () => _user.Id,
+            _pageHost.OpenProject,
+            _pageHost.OpenCommit,
+            () => ShowHeaderFlyout(NotificationsFlyout, NotificationsButton),
+            RestoreAndActivateWindow,
+            _pageHost.ReloadCurrentPageAfterReset);
         Activated += MainWindow_Activated;
         Closed += MainWindow_Closed;
         SystemBackdrop = new MicaBackdrop();
@@ -128,18 +144,14 @@ public sealed partial class MainWindow : Window
 
     private void ApplySavedTheme()
     {
-        _themeService.Apply(RootGrid, ReadTheme());
+        _themeService.Apply(RootGrid, SettingsView.ReadTheme());
     }
 
     private void MainWindow_Closed(object sender, WindowEventArgs args)
     {
         _themeService.Dispose();
-        _notifications.Changed -= Notifications_Changed;
-        _notifications.PageRefreshRequested -= Notifications_PageRefreshRequested;
-        _notifications.ItemsArrived -= Notifications_ItemsArrived;
+        _notificationCenter.Shutdown();
         Activated -= MainWindow_Activated;
-        _notificationsRunning = false;
-        _notifications.Stop();
         _bridge.StateChanged -= Bridge_StateChanged;
         _bridge.Dispose();
     }
@@ -179,64 +191,7 @@ public sealed partial class MainWindow : Window
         SetBridgeStatus(signedIn ? "BridgeConnected" : "BridgeSessionEnded");
     }
 
-    private string? _bridgeStatusDetail;
-
-    private void SetBridgeStatus(string key, string? detail = null)
-    {
-        _bridgeStatusKey = key;
-        _bridgeStatusDetail = detail;
-        UpdateBridgeStatusView();
-    }
-
-    private static Style VersionStyle(string key) => (Style)Application.Current.Resources[key];
-
-    private static FontIcon VersionGlyph(string glyph, string styleKey) =>
-        new() { Glyph = glyph, FontFamily = PageParts.SymbolFont, Style = VersionStyle(styleKey) };
-
-    /// <summary>Redraws the Version info status block (indicator, text, detail) from the bridge state; no-op until the page is built.</summary>
-    private void UpdateBridgeStatusView()
-    {
-        if (_bridgeStatusPanel is null || _bridgeIndicatorHost is null || _bridgeStatusText is null || _bridgeStatusDetailText is null) return;
-
-        string textStyle;
-        string? detail = null;
-        UIElement indicator;
-        switch (_bridgeStatusKey)
-        {
-            case "BridgeConnected":
-                textStyle = "VersionStatusSuccessTextStyle";
-                detail = L("BridgeConnectedDetail");
-                var disc = new Border { Style = VersionStyle("VersionStatusSuccessBadgeStyle") };
-                disc.Child = VersionGlyph("\uE73E", "VersionStatusSuccessGlyphStyle");
-                indicator = disc;
-                break;
-            case "BridgeSessionEnded":
-                textStyle = "VersionStatusCautionTextStyle";
-                detail = L("BridgeSessionEndedDetail");
-                indicator = VersionGlyph("\uE7BA", "VersionStatusCautionGlyphStyle");
-                break;
-            case "BridgeUnavailable":
-                textStyle = "VersionStatusCriticalTextStyle";
-                detail = string.IsNullOrEmpty(_bridgeStatusDetail) ? null : _bridgeStatusDetail;
-                indicator = VersionGlyph("\uE783", "VersionStatusCriticalGlyphStyle");
-                break;
-            default:
-                textStyle = "VersionStatusTextStyle";
-                indicator = new ProgressRing { Width = 20, Height = 20, IsActive = true, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                break;
-        }
-
-        _bridgeIndicatorHost.Children.Clear();
-        _bridgeIndicatorHost.Children.Add(indicator);
-        var status = L(_bridgeStatusKey);
-        _bridgeStatusText.Text = status;
-        _bridgeStatusText.Style = VersionStyle(textStyle);
-        _bridgeStatusDetailText.Text = detail ?? string.Empty;
-        _bridgeStatusDetailText.Visibility = string.IsNullOrEmpty(detail) ? Visibility.Collapsed : Visibility.Visible;
-        AutomationProperties.SetName(_bridgeStatusPanel, string.IsNullOrEmpty(detail)
-            ? $"{L("BridgeLabel")}: {status}"
-            : $"{L("BridgeLabel")}: {status}, {detail}");
-    }
+    private void SetBridgeStatus(string key, string? detail = null) => _pageHost.SetBridgeStatus(key, detail);
 
     private void ApplyLocalizedStrings()
     {
@@ -253,7 +208,7 @@ public sealed partial class MainWindow : Window
         AutomationProperties.SetName(NotificationsButton, L("Notifications"));
         AutomationProperties.SetName(ProfileButton, accountMenuName);
         NotificationsHeader.Text = L("Notifications");
-        UpdateNotificationsUi();
+        _notificationCenter.RefreshUi();
         AccountName.Text = _user.Username;
         UpdateAccountStatusText();
         foreach (var item in Navigation.MenuItems.OfType<NavigationViewItem>().Concat(Navigation.FooterMenuItems.OfType<NavigationViewItem>()))
@@ -326,13 +281,10 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void OnAvatarChanged(byte[]? avatar)
     {
-        if (_signingOut) return;
+        if (_signOut.IsSigningOut) return;
         UpdateUser(_user with { AvatarPng = avatar });
         ApplyHeaderAvatars();
-        _projects?.UserChanged();
-        _commitHistory?.UserChanged();
-        _administration?.UserChanged();
-        OnWorkChanged();
+        _pageHost.OnUserAvatarChanged();
     }
 
     /// <summary>
@@ -368,9 +320,9 @@ public sealed partial class MainWindow : Window
     private void OnApproved(AuthenticatedUser user)
     {
         // A reply that arrives after Sign out must not open the workspace in the closing window.
-        if (_signingOut) return;
+        if (_signOut.IsSigningOut) return;
         UpdateUser(user);
-        _approval = null;
+        _pageHost.ResetApproval();
         _history.Clear();
         NavigateTo(NativePage.Dashboard, false);
     }
@@ -426,211 +378,39 @@ public sealed partial class MainWindow : Window
         if (!NativePageCatalog.IsAvailable(page, _user)) return;
         if (remember && page != _currentPage) _history.Push(_currentPage);
         _currentPage = page;
-        ContentFrame.Content = CreatePlaceholder(page);
+        ContentFrame.Content = _pageHost.CreatePlaceholder(page);
         UpdateBackButton();
         SyncNavigationSelection(page);
     }
 
-    /// <summary>The page's own screen stack (Projects, Commit history, Server maintenance or Administration), which Back walks first.</summary>
-    private IScreenStack? CurrentStackPage => _currentPage switch
-    {
-        NativePage.Projects => _projects,
-        NativePage.CommitHistory => _commitHistory,
-        NativePage.ServerMaintenance => _maintenance,
-        NativePage.Administration => _administration,
-        _ => null
-    };
-
     /// <summary>Back is shown for nested pages and for an item opened inside a page's own screen stack.</summary>
     private void UpdateBackButton()
     {
-        var stackNested = CurrentStackPage?.CanGoBack == true;
+        var stackNested = _pageHost.CurrentStackPage?.CanGoBack == true;
         AppTitleBar.IsBackButtonVisible = NativePageCatalog.IsNested(_currentPage) || stackNested;
         AppTitleBar.IsBackButtonEnabled = _history.Count > 0 || stackNested;
     }
 
     private void GoBack()
     {
-        if (CurrentStackPage?.TryGoBack() == true) return;
+        if (_pageHost.CurrentStackPage?.TryGoBack() == true) return;
         if (_history.Count == 0) return;
         var page = _history.Pop();
         NavigateTo(page, false);
     }
 
-    private FrameworkElement CreatePlaceholder(NativePage page)
-    {
-        if (page == NativePage.Dashboard) return CreateDashboardPage();
-        if (page == NativePage.Projects) return CreateProjectsPage();
-        if (page == NativePage.CommitHistory) return CreateCommitHistoryPage();
-        if (page == NativePage.AwaitingApproval) return CreateApprovalPage();
-        if (page == NativePage.ServerMaintenance) return CreateMaintenancePage();
-        if (page == NativePage.ProjectManagement) return CreateManagementPage();
-        if (page == NativePage.ProfileSettings) return CreateProfilePage();
-        if (page == NativePage.Administration) return CreateAdministrationPage();
-        if (page == NativePage.AppSettings) return CreateSettingsPage();
-        if (page == NativePage.VersionInfo) return CreateVersionInfoPage();
+    // ----- Notification center (see NotificationCenter) -----
 
-        var panel = new StackPanel { Spacing = 12, Padding = new Thickness(32) };
-        panel.Children.Add(new TextBlock { Text = L("Page_" + NativePageCatalog.SearchKey(page)), Style = (Style)Application.Current.Resources["TitleTextBlockStyle"] });
-        panel.Children.Add(new TextBlock { Text = L("NotConnected"), TextWrapping = TextWrapping.Wrap });
-        return panel;
-    }
-
-    private FrameworkElement CreateDashboardPage()
-    {
-        _dashboard ??= new DashboardView(L, _user, ReadLanguage(),
-            () => _bridge.RequestAsync("dashboard"),
-            page => NavigateTo(page),
-            OpenProject,
-            OpenPublish,
-            SignOutWhenWritesFinish);
-        _ = _dashboard.EnsureLoadedAsync();
-        return _dashboard;
-    }
-
-    private FrameworkElement CreateProjectsPage()
-    {
-        _projects ??= new ProjectsView(L, () => _user, ReadLanguage(),
-            (command, payload) => _bridge.RequestAsync(command, payload),
-            SignOutWhenWritesFinish,
-            UpdateBackButton,
-            ProjectsRoot.List,
-            OnWorkChanged,
-            _writeGate);
-        _ = _projects.EnsureLoadedAsync();
-        return _projects;
-    }
-
-    private FrameworkElement CreateCommitHistoryPage()
-    {
-        _commitHistory ??= new ProjectsView(L, () => _user, ReadLanguage(),
-            (command, payload) => _bridge.RequestAsync(command, payload),
-            SignOutWhenWritesFinish,
-            UpdateBackButton,
-            ProjectsRoot.History,
-            OnWorkChanged,
-            _writeGate);
-        _ = _commitHistory.EnsureLoadedAsync();
-        return _commitHistory;
-    }
-
-    private FrameworkElement CreateApprovalPage()
-    {
-        _approval ??= new ApprovalView(L, _user,
-            () => _bridge.RequestAsync("session"),
-            OnApproved,
-            UpdateUser,
-            // The web's "Announcements" button; the announcements live on the Server maintenance page.
-            () => NavigateTo(NativePage.ServerMaintenance),
-            SignOutWhenWritesFinish);
-        return _approval;
-    }
-
-    private FrameworkElement CreateManagementPage()
-    {
-        _management ??= new ManagementView(L, ReadLanguage(), _user,
-            (command, payload) => _bridge.RequestAsync(command, payload),
-            SignOutWhenWritesFinish,
-            _writeGate,
-            OnWorkChanged);
-        _ = _management.EnsureLoadedAsync();
-        return _management;
-    }
-
-    private FrameworkElement CreateProfilePage()
-    {
-        _profile ??= new ProfileView(L,
-            (command, payload) => _bridge.RequestAsync(command, payload),
-            () => _user,
-            _writeGate,
-            () => WindowNative.GetWindowHandle(this),
-            OnAvatarChanged,
-            SignOutWhenWritesFinish,
-            SignOutWhenWritesFinish);
-        _ = _profile.EnsureLoadedAsync();
-        return _profile;
-    }
-
-    private FrameworkElement CreateMaintenancePage()
-    {
-        _maintenance ??= new MaintenanceView(L, ReadLanguage(),
-            (command, payload) => _bridge.RequestAsync(command, payload),
-            () => _user,
-            SignOutWhenWritesFinish,
-            UpdateBackButton);
-        _ = _maintenance.EnsureLoadedAsync();
-        return _maintenance;
-    }
-
-    private FrameworkElement CreateAdministrationPage()
-    {
-        _administration ??= new AdministrationView(L, ReadLanguage(),
-            (command, payload) => _bridge.RequestAsync(command, payload),
-            SignOutWhenWritesFinish,
-            UpdateBackButton,
-            () => _user,
-            _writeGate,
-            OnWorkChanged);
-        _ = _administration.EnsureLoadedAsync();
-        return _administration;
-    }
-
-    /// <summary>Opens a project's publish form from the Dashboard (list and project underneath for Back).</summary>
-    private void OpenPublish(string projectId, string name)
-    {
-        NavigateTo(NativePage.Projects);
-        _projects?.OpenPublish(projectId, name);
-    }
-
-    /// <summary>A write changed reservations or commits: other pages reload when shown again.</summary>
-    private void OnWorkChanged()
-    {
-        _dashboard?.MarkStale();
-        _projects?.MarkStale();
-        _commitHistory?.MarkStale();
-        _management?.MarkStale();
-        _administration?.MarkStale();
-    }
-
-    /// <summary>Opens a project overview from another page (the list stays underneath for Back).</summary>
-    private void OpenProject(string projectId, string name)
-    {
-        NavigateTo(NativePage.Projects);
-        _projects?.OpenProject(projectId, name);
-    }
-
-    /// <summary>Opens a commit from another place (a notification): Projects with the project underneath for Back.</summary>
-    private void OpenCommit(string projectId, string name, string commitId)
-    {
-        NavigateTo(NativePage.Projects);
-        _projects?.OpenCommit(projectId, name, commitId);
-    }
-
-    // ----- Notification center -----
-
-    /// <summary>Starts or stops the poller so it runs only while the bridge is connected, an approved account with a known id is signed in and no sign-out is under way.</summary>
-    private void SyncNotifications()
-    {
-        var shouldRun = !_signingOut && !_signOutRequested
-            && _bridge.State == BridgeConnectionState.Connected
-            && IsPageAvailable(NativePage.Projects)
-            && _user.Id is not null;
-        if (shouldRun == _notificationsRunning) return;
-        _notificationsRunning = shouldRun;
-        if (shouldRun) _notifications.Start(_user.Id);
-        else _notifications.Stop();
-    }
+    private void SyncNotifications() => _notificationCenter.SyncNotifications();
 
     private void MainWindow_Activated(object sender, WindowActivatedEventArgs args) =>
         _windowActive = args.WindowActivationState != WindowActivationState.Deactivated;
 
-    private void Notifications_ItemsArrived(IReadOnlyList<NotificationItem> items) =>
-        NotificationToasts.Show(items, _windowActive, L);
+    /// <summary>A toast was clicked while the app runs (already validated by <see cref="NotificationToastPolicy"/>): the center opens the item, or the list when it is no longer known.</summary>
+    internal void HandleToastActivation(ToastTarget target) => _notificationCenter.HandleToastActivation(target);
 
-    /// <summary>A toast was clicked while the app runs (already validated by <see cref="NotificationToastPolicy"/>): open the item, or the list when it is no longer known.</summary>
-    internal void HandleToastActivation(ToastTarget target)
+    private void RestoreAndActivateWindow()
     {
-        if (_signingOut || _signOutRequested) return;
         try
         {
             if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter) presenter.Restore();
@@ -640,458 +420,11 @@ public sealed partial class MainWindow : Window
             // Activate below still brings the window forward.
         }
         Activate();
-        NotificationItem? match = null;
-        if (target.Action == ToastAction.Open)
-        {
-            foreach (var item in _notifications.Feed.Items)
-            {
-                if (item.ProjectId != target.ProjectId) continue;
-                if (target.CommitId is not null && item.Commit?.Id != target.CommitId) continue;
-                match = item;
-                break;
-            }
-        }
-        if (match is not null) OpenNotification(match);
-        else ShowHeaderFlyout(NotificationsFlyout, NotificationsButton);
     }
 
-    private void Notifications_Changed(object? sender, EventArgs e)
-    {
-        // Items that arrive while the flyout is open are shown at once and never counted as unread.
-        if (_notificationsFlyoutOpen && _notifications.Feed.UnreadCount > 0)
-        {
-            SnapshotUnread();
-            _notifications.MarkAllSeen();
-            return;
-        }
-        UpdateNotificationsUi();
-    }
+    private void NotificationsFlyout_Opened(object? sender, object e) => _notificationCenter.FlyoutOpened();
 
-    private void Notifications_PageRefreshRequested(object? sender, EventArgs e)
-    {
-        if (_signingOut) return;
-        // The server reset the cursor: reload what is on screen through the shared stale path.
-        OnWorkChanged();
-        _ = _currentPage switch
-        {
-            NativePage.Dashboard => _dashboard?.EnsureLoadedAsync(),
-            NativePage.Projects => _projects?.EnsureLoadedAsync(),
-            NativePage.CommitHistory => _commitHistory?.EnsureLoadedAsync(),
-            NativePage.ProjectManagement => _management?.EnsureLoadedAsync(),
-            NativePage.Administration => _administration?.EnsureLoadedAsync(),
-            _ => null
-        };
-    }
-
-    private void NotificationsFlyout_Opened(object? sender, object e)
-    {
-        _notificationsFlyoutOpen = true;
-        SnapshotUnread();
-        _notifications.MarkAllSeen();
-    }
-
-    private void NotificationsFlyout_Closed(object? sender, object e)
-    {
-        _notificationsFlyoutOpen = false;
-        _unreadSnapshot.Clear();
-        NotificationsList.Children.Clear();
-    }
-
-    private void SnapshotUnread()
-    {
-        var feed = _notifications.Feed;
-        var seen = feed.LastSeen ?? 0;
-        foreach (var item in feed.Items)
-        {
-            if (item.Id > seen) _unreadSnapshot.Add(item.Id);
-        }
-    }
-
-    /// <summary>Refreshes the bell badge and name, and (while the flyout is open) the status line and the list.</summary>
-    private void UpdateNotificationsUi()
-    {
-        var feed = _notifications.Feed;
-        var count = feed.UnreadCount;
-        var overflow = feed.UnreadOverflow || count > 99;
-        if (count > 0)
-        {
-            // InfoBadge shows numbers only, so 99+ is a "99" badge whose name (below) says "99+".
-            NotificationsBadge.Value = Math.Min(count, 99);
-            NotificationsBadge.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            NotificationsBadge.Visibility = Visibility.Collapsed;
-        }
-        var name = count > 0
-            ? string.Format(L("Notifications_UnreadFormat"), overflow ? "99+" : count.ToString(System.Globalization.CultureInfo.CurrentCulture))
-            : L("Notifications");
-        ToolTipService.SetToolTip(NotificationsButton, name);
-        AutomationProperties.SetName(NotificationsButton, name);
-
-        if (!_notificationsFlyoutOpen) return;
-        var items = feed.Items;
-        var status = _notifications.State switch
-        {
-            NotificationPollerState.Loading => L("Notifications_Loading"),
-            NotificationPollerState.Ready => items.Count == 0 ? L("Notifications_Empty") : null,
-            NotificationPollerState.Paused => L("Notifications_Paused"),
-            NotificationPollerState.Error => L("Notifications_Error"),
-            _ => L("NotConnected")
-        };
-        NotificationsStatus.Text = status ?? string.Empty;
-        NotificationsStatus.Visibility = status is null ? Visibility.Collapsed : Visibility.Visible;
-        NotificationsList.Children.Clear();
-        var language = ReadLanguage();
-        foreach (var item in items) NotificationsList.Children.Add(CreateNotificationRow(item, _unreadSnapshot.Contains(item.Id), language));
-    }
-
-    private Button CreateNotificationRow(NotificationItem item, bool unread, string language)
-    {
-        var sentence = NotificationText.Sentence(item, L);
-        var commitLine = NotificationText.CommitLine(item, L);
-        var time = DashboardModel.FormatDate(item.CreatedAt, language);
-
-        var grid = new Grid { ColumnSpacing = 12 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var icon = new FontIcon
-        {
-            Glyph = NotificationText.Glyph(item.Kind),
-            FontSize = 16,
-            FontFamily = PageParts.SymbolFont,
-            Style = PageParts.Res("DashboardIconStyle"),
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 2, 0, 0)
-        };
-        AutomationProperties.SetAccessibilityView(icon, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-        grid.Children.Add(icon);
-
-        var body = new StackPanel { Spacing = 2 };
-        body.Children.Add(new TextBlock { Text = sentence, TextWrapping = TextWrapping.Wrap });
-        if (commitLine is not null)
-        {
-            body.Children.Add(new TextBlock
-            {
-                Text = commitLine,
-                Style = PageParts.Res("DashboardSecondaryTextStyle"),
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                MaxLines = 1
-            });
-        }
-        if (time.Length > 0) body.Children.Add(new TextBlock { Text = time, Style = PageParts.Res("DashboardCaptionTextStyle") });
-        Grid.SetColumn(body, 1);
-        grid.Children.Add(body);
-
-        if (unread)
-        {
-            var dot = new Ellipse { Style = PageParts.Res("NotificationUnreadDotStyle"), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 6, 0, 0) };
-            AutomationProperties.SetAccessibilityView(dot, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-            Grid.SetColumn(dot, 2);
-            grid.Children.Add(dot);
-        }
-
-        var button = new Button { Style = PageParts.Res("NotificationItemButtonStyle"), Content = grid };
-        var parts = new List<string>();
-        if (unread) parts.Add(L("Notifications_UnreadItem"));
-        parts.Add(sentence);
-        if (commitLine is not null) parts.Add(commitLine);
-        if (time.Length > 0) parts.Add(time);
-        AutomationProperties.SetName(button, string.Join(", ", parts));
-        button.Click += (_, _) => OpenNotification(item);
-        return button;
-    }
-
-    /// <summary>A row was clicked: reservation kinds open the project, a published commit opens the commit; nothing happens when Projects is unavailable to this account.</summary>
-    private void OpenNotification(NotificationItem item)
-    {
-        NotificationsFlyout.Hide();
-        if (_signingOut || !IsPageAvailable(NativePage.Projects)) return;
-        if (item.Kind == NotificationKind.CommitPublished && item.Commit is { } commit) OpenCommit(item.ProjectId, item.ProjectName, commit.Id);
-        else OpenProject(item.ProjectId, item.ProjectName);
-    }
-
-    private FrameworkElement CreateSettingsPage()
-    {
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        var panel = new StackPanel { Spacing = 16, Padding = new Thickness(32) };
-        panel.Children.Add(new TextBlock
-        {
-            Text = L("Page_App settings"),
-            Style = (Style)Application.Current.Resources["TitleTextBlockStyle"]
-        });
-        panel.Children.Add(new TextBlock { Text = L("SettingsDescription"), TextWrapping = TextWrapping.Wrap });
-
-        panel.Children.Add(new TextBlock { Text = L("LanguageHeader"), Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"] });
-        _updatingSettings = true;
-        _languageOptions = new RadioButtons();
-        AutomationProperties.SetName(_languageOptions, L("LanguageHeader"));
-        _languageOptions.Items.Add(new RadioButton { Content = L("LanguageEnglish"), Tag = "en-US" });
-        _languageOptions.Items.Add(new RadioButton { Content = L("LanguageJapanese"), Tag = "ja-JP" });
-        _languageOptions.SelectedItem = FindRadioButton(_languageOptions, ReadLanguage());
-        _languageOptions.SelectionChanged += SettingsLanguage_SelectionChanged;
-        panel.Children.Add(_languageOptions);
-
-        panel.Children.Add(new TextBlock { Text = L("ThemeHeader"), Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"] });
-        _themeOptions = new RadioButtons();
-        AutomationProperties.SetName(_themeOptions, L("ThemeHeader"));
-        _themeOptions.Items.Add(new RadioButton { Content = L("ThemeSystem"), Tag = "System" });
-        _themeOptions.Items.Add(new RadioButton { Content = L("ThemeLight"), Tag = "Light" });
-        _themeOptions.Items.Add(new RadioButton { Content = L("ThemeDark"), Tag = "Dark" });
-        _themeOptions.SelectedItem = FindRadioButton(_themeOptions, ReadTheme());
-        _themeOptions.SelectionChanged += SettingsTheme_SelectionChanged;
-        panel.Children.Add(_themeOptions);
-        _updatingSettings = false;
-
-        _settingsInfoBar = new InfoBar { IsOpen = false, IsClosable = false };
-        panel.Children.Add(_settingsInfoBar);
-        scroll.Content = panel;
-        return scroll;
-    }
-
-    private FrameworkElement CreateVersionInfoPage()
-    {
-        var info = RuntimeVersionInfo.GetSnapshot();
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        var panel = new StackPanel { Spacing = 16, Padding = new Thickness(32) };
-
-        // Hero card: banner logo, divider and the version column.
-        var logo = new Image
-        {
-            Style = VersionStyle("VersionBannerImageStyle"),
-            MaxHeight = 213,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        AutomationProperties.SetName(logo, L("VersionInfo_LogoName"));
-        var heroDivider = new Border { Style = VersionStyle("VersionHeroDividerStyle"), Margin = new Thickness(16, 8, 16, 8) };
-        var versionColumn = new StackPanel { VerticalAlignment = VerticalAlignment.Center, MinWidth = 300 };
-        versionColumn.Children.Add(new TextBlock { Text = L("VersionLabel"), Style = VersionStyle("VersionHeroLabelStyle") });
-        versionColumn.Children.Add(new TextBlock { Text = info.DisplayVersion, Style = VersionStyle("VersionHeroNumberStyle"), Margin = new Thickness(0, 0, 0, 16) });
-        versionColumn.Children.Add(new TextBlock { Text = L("BetaLabel"), Style = VersionStyle("VersionHeroLabelStyle"), Margin = new Thickness(0, 0, 0, 8) });
-        var badge = new Border { Style = VersionStyle("VersionChannelBadgeStyle"), Child = new TextBlock { Text = L("Beta"), Style = VersionStyle("VersionChannelBadgeTextStyle") } };
-        versionColumn.Children.Add(badge);
-        var hero = new Grid();
-        hero.Children.Add(logo);
-        hero.Children.Add(heroDivider);
-        hero.Children.Add(versionColumn);
-        panel.Children.Add(new Border { Style = VersionStyle("DashboardCardStyle"), Padding = new Thickness(16), Child = hero });
-
-        // Lower row: runtime environment and build & connection cards.
-        var runtimeRows = new StackPanel();
-        AddVersionRow(runtimeRows, "\uE81E", "FrameworkLabel", info.Framework);
-        AddVersionRow(runtimeRows, "\uF158", "WindowsAppSdkLabel", info.WindowsAppSdkVersion);
-        AddVersionRow(runtimeRows, "\uE737", "WebViewLabel", info.WebViewVersion, L("VersionInfo_WebViewRole"));
-
-        _bridgeIndicatorHost = new Grid { Width = 24, Height = 24, VerticalAlignment = VerticalAlignment.Center };
-        _bridgeStatusText = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
-        _bridgeStatusDetailText = new TextBlock { Style = VersionStyle("DashboardSecondaryTextStyle"), TextWrapping = TextWrapping.Wrap };
-        var statusLine = new Grid { ColumnSpacing = 8 };
-        statusLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        statusLine.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetColumn(_bridgeStatusText, 1);
-        statusLine.Children.Add(_bridgeIndicatorHost);
-        statusLine.Children.Add(_bridgeStatusText);
-        _bridgeStatusPanel = new StackPanel { Spacing = 2, Margin = new Thickness(0, 4, 0, 0) };
-        _bridgeStatusPanel.Children.Add(statusLine);
-        _bridgeStatusPanel.Children.Add(_bridgeStatusDetailText);
-        AutomationProperties.SetLiveSetting(_bridgeStatusPanel, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-
-        var buildRows = new StackPanel();
-        AddVersionRow(buildRows, "\uE950", "ArchitectureLabel", info.Architecture);
-        AddVersionRow(buildRows, "\uF158", "PackageIdentityLabel", info.PackageIdentity);
-        AddVersionRow(buildRows, "\uE753", "BridgeLabel", null, null, _bridgeStatusPanel);
-        UpdateBridgeStatusView();
-
-        var runtimeCard = CreateVersionCard(L("VersionInfo_RuntimeHeader"), runtimeRows);
-        var buildCard = CreateVersionCard(L("VersionInfo_BuildHeader"), buildRows);
-        var lower = new Grid();
-        lower.Children.Add(runtimeCard);
-        lower.Children.Add(buildCard);
-        panel.Children.Add(lower);
-        scroll.Content = panel;
-
-        // Wide: hero in three columns and the cards side by side; narrow (< 860 available): everything stacks.
-        bool? narrow = null;
-        scroll.SizeChanged += (_, _) =>
-        {
-            var isNarrow = scroll.ActualWidth - 64 < 860;
-            if (narrow == isNarrow) return;
-            narrow = isNarrow;
-            ApplyVersionLayout(isNarrow, hero, logo, heroDivider, versionColumn, lower, runtimeCard, buildCard);
-        };
-        ApplyVersionLayout(false, hero, logo, heroDivider, versionColumn, lower, runtimeCard, buildCard);
-        return scroll;
-    }
-
-    private static void ApplyVersionLayout(bool narrow, Grid hero, FrameworkElement logo, FrameworkElement divider, FrameworkElement versionColumn,
-        Grid lower, FrameworkElement runtimeCard, FrameworkElement buildCard)
-    {
-        hero.ColumnDefinitions.Clear();
-        hero.RowDefinitions.Clear();
-        lower.ColumnDefinitions.Clear();
-        lower.RowDefinitions.Clear();
-        if (narrow)
-        {
-            hero.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Grid.SetColumn(logo, 0); Grid.SetRow(logo, 0);
-            divider.Visibility = Visibility.Collapsed;
-            Grid.SetColumn(divider, 0); Grid.SetRow(divider, 0);
-            Grid.SetColumn(versionColumn, 0); Grid.SetRow(versionColumn, 1);
-            versionColumn.Margin = new Thickness(0, 16, 0, 0);
-            ((StackPanel)versionColumn).MinWidth = 0;
-
-            lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            lower.ColumnSpacing = 0;
-            lower.RowSpacing = 16;
-            Grid.SetColumn(runtimeCard, 0); Grid.SetRow(runtimeCard, 0);
-            Grid.SetColumn(buildCard, 0); Grid.SetRow(buildCard, 1);
-            runtimeCard.VerticalAlignment = VerticalAlignment.Top;
-            buildCard.VerticalAlignment = VerticalAlignment.Top;
-        }
-        else
-        {
-            hero.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            hero.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            hero.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            hero.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            Grid.SetColumn(logo, 0); Grid.SetRow(logo, 0);
-            divider.Visibility = Visibility.Visible;
-            Grid.SetColumn(divider, 1); Grid.SetRow(divider, 0);
-            Grid.SetColumn(versionColumn, 2); Grid.SetRow(versionColumn, 0);
-            versionColumn.Margin = new Thickness(40, 0, 0, 0);
-            ((StackPanel)versionColumn).MinWidth = 300;
-
-            lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4, GridUnitType.Star) });
-            lower.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
-            lower.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            lower.ColumnSpacing = 24;
-            lower.RowSpacing = 0;
-            Grid.SetColumn(runtimeCard, 0); Grid.SetRow(runtimeCard, 0);
-            Grid.SetColumn(buildCard, 1); Grid.SetRow(buildCard, 0);
-            runtimeCard.VerticalAlignment = VerticalAlignment.Stretch;
-            buildCard.VerticalAlignment = VerticalAlignment.Stretch;
-        }
-    }
-
-    private static Border CreateVersionCard(string header, StackPanel rows)
-    {
-        var headerText = new TextBlock
-        {
-            Text = header,
-            Style = VersionStyle("SubtitleTextBlockStyle"),
-            Margin = new Thickness(0, 0, 0, 8),
-        };
-        AutomationProperties.SetHeadingLevel(headerText, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
-        var content = new StackPanel();
-        content.Children.Add(headerText);
-        content.Children.Add(rows);
-        return new Border { Style = VersionStyle("DashboardCardStyle"), Padding = new Thickness(24, 20, 24, 20), Child = content };
-    }
-
-    /// <summary>Adds one icon + label + value row; a divider goes between rows, not after the last one.</summary>
-    private void AddVersionRow(StackPanel rows, string glyph, string labelKey, string? value, string? note = null, UIElement? custom = null)
-    {
-        if (rows.Children.Count > 0) rows.Children.Add(new Border { Style = VersionStyle("DashboardDividerStyle") });
-        var row = new Grid { Padding = new Thickness(0, 14, 0, 14) };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(56) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.Children.Add(VersionGlyph(glyph, "VersionInfoRowIconStyle"));
-        var text = new StackPanel { Spacing = 2 };
-        Grid.SetColumn(text, 1);
-        text.Children.Add(new TextBlock { Text = L(labelKey), Style = VersionStyle("BodyStrongTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
-        if (value is not null) text.Children.Add(new TextBlock { Text = value, Style = VersionStyle("BodyTextBlockStyle"), TextWrapping = TextWrapping.Wrap });
-        if (note is not null) text.Children.Add(new TextBlock { Text = note, Style = VersionStyle("DashboardSecondaryTextStyle"), TextWrapping = TextWrapping.Wrap });
-        if (custom is not null) text.Children.Add(custom);
-        row.Children.Add(text);
-        rows.Children.Add(row);
-    }
-
-    private static RadioButton? FindRadioButton(RadioButtons buttons, string tag) =>
-        buttons.Items.OfType<RadioButton>().FirstOrDefault(button => string.Equals(button.Tag as string, tag, StringComparison.Ordinal));
-
-    private string ReadLanguage()
-    {
-        try { return SettingsPolicy.NormalizeLanguage(ApplicationData.Current.LocalSettings.Values[SettingsPolicy.LanguageKey] as string); }
-        catch { return SettingsPolicy.DefaultLanguage; }
-    }
-
-    private string ReadTheme()
-    {
-        return ThemeService.ReadSavedPreference();
-    }
-
-    private void SettingsLanguage_SelectionChanged(object sender, SelectionChangedEventArgs args)
-    {
-        if (_updatingSettings || _languageOptions?.SelectedItem is not RadioButton item) return;
-        var language = SettingsPolicy.NormalizeLanguage(item.Tag as string);
-        // RadioButtons can report the initial selection after the page is built; only a real change is saved.
-        if (language == ReadLanguage()) return;
-        PersistSetting(SettingsPolicy.LanguageKey, language, restartRequired: true);
-    }
-
-    private void SettingsTheme_SelectionChanged(object sender, SelectionChangedEventArgs args)
-    {
-        if (_updatingSettings || _themeOptions?.SelectedItem is not RadioButton item) return;
-        var theme = SettingsPolicy.NormalizeTheme(item.Tag as string);
-        if (theme == ReadTheme()) return;
-        if (PersistSetting(SettingsPolicy.ThemeKey, theme, restartRequired: false)) ApplySavedTheme();
-    }
-
-    private bool PersistSetting(string key, string value, bool restartRequired)
-    {
-        var previous = key == SettingsPolicy.LanguageKey ? ReadLanguage() : ReadTheme();
-        try
-        {
-            ApplicationData.Current.LocalSettings.Values[key] = value;
-            if (restartRequired)
-            {
-                ShowSettingsInfo(L("SettingsRestartTitle"), L("SettingsRestartMessage"), InfoBarSeverity.Informational);
-            }
-            else
-            {
-                ShowSettingsInfo(L("SettingsThemeSavedTitle"), L("SettingsThemeSavedMessage"), InfoBarSeverity.Informational);
-            }
-            return true;
-        }
-        catch
-        {
-            RollbackSetting(key, previous);
-            ShowSettingsInfo(L("SettingsSaveErrorTitle"), L("SettingsSaveErrorMessage"), InfoBarSeverity.Error);
-            return false;
-        }
-    }
-
-    private void RollbackSetting(string key, string value)
-    {
-        _updatingSettings = true;
-        try
-        {
-            if (key == SettingsPolicy.LanguageKey && _languageOptions is not null)
-                _languageOptions.SelectedItem = FindRadioButton(_languageOptions, value);
-            else if (key == SettingsPolicy.ThemeKey && _themeOptions is not null)
-                _themeOptions.SelectedItem = FindRadioButton(_themeOptions, value);
-        }
-        finally
-        {
-            _updatingSettings = false;
-        }
-    }
-
-    private void ShowSettingsInfo(string title, string message, InfoBarSeverity severity)
-    {
-        if (_settingsInfoBar is null) return;
-        _settingsInfoBar.Title = title;
-        _settingsInfoBar.Message = message;
-        _settingsInfoBar.Severity = severity;
-        _settingsInfoBar.IsOpen = true;
-    }
+    private void NotificationsFlyout_Closed(object? sender, object e) => _notificationCenter.FlyoutClosed();
 
     /// <summary>
     /// Selects the page's pane item; a page without a visible item (account-menu and title-bar pages) clears the
@@ -1151,138 +484,18 @@ public sealed partial class MainWindow : Window
     private void NotificationsButton_Click(object sender, RoutedEventArgs e) => ShowHeaderFlyout(NotificationsFlyout, NotificationsButton);
     private void ProfileButton_Click(object sender, RoutedEventArgs e) => ShowHeaderFlyout(AccountFlyout, ProfileButton);
 
-    private void ShowHeaderFlyout(Flyout flyout, FrameworkElement target)
-    {
-        // Set before showing: the Button's own flyout opening reads the same placement.
-        flyout.Placement = HeaderFlyoutOpensAbove(flyout, target)
-            ? Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.TopEdgeAlignedRight
-            : Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight;
-        flyout.ShowAt(target);
-    }
+    private void ShowHeaderFlyout(Flyout flyout, FrameworkElement target) => HeaderFlyoutPlacement.Show(this, flyout, target);
 
-    private bool HeaderFlyoutOpensAbove(Flyout flyout, FrameworkElement target)
-    {
-        try
-        {
-            if (flyout.Content is not FrameworkElement content || target.XamlRoot is null) return false;
-            content.Measure(new global::Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-            // Before the first open a templated root may not measure yet; fall back to its maximum height.
-            var height = content.DesiredSize.Height > 0 ? content.DesiredSize.Height : content.MaxHeight;
-            if (double.IsInfinity(height) || height <= 0) return false;
-
-            var scale = target.XamlRoot.RasterizationScale;
-            var bounds = target.TransformToVisual(null).TransformBounds(new global::Windows.Foundation.Rect(0, 0, target.ActualWidth, target.ActualHeight));
-            var hwnd = WindowNative.GetWindowHandle(this);
-            var origin = new NativePoint();
-            if (!ClientToScreen(hwnd, ref origin)) return false;
-            var appWindow = AppWindow.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd));
-            var work = DisplayArea.GetFromWindowId(appWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
-            var spaceAbove = (origin.Y + bounds.Top * scale - work.Y) / scale;
-            var spaceBelow = (work.Y + work.Height - (origin.Y + bounds.Bottom * scale)) / scale;
-            return FlyoutPlacementPolicy.OpenAbove(height, spaceBelow, spaceAbove);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool ClientToScreen(IntPtr hwnd, ref NativePoint point);
-
-    private struct NativePoint
-    {
-        public int X;
-        public int Y;
-    }
     private void ProfileSettings_Click(object sender, RoutedEventArgs e) { AccountFlyout.Hide(); NavigateTo(NativePage.ProfileSettings); }
     private void Administration_Click(object sender, RoutedEventArgs e) { AccountFlyout.Hide(); if (NativePageCatalog.CanAdminister(_user)) NavigateTo(NativePage.Administration); }
     private async void SignOut_Click(object sender, RoutedEventArgs e)
     {
         AccountFlyout.Hide();
-        await SignOutAsync();
-    }
-
-    private async Task SignOutAsync()
-    {
-        if (_signingOut) return;
-        // Signing out now would drop the answer of a write that is still being sent; sign out after it finishes.
-        if (_writeGate.InFlight)
-        {
-            await ShowSignOutBlockedAsync();
-            return;
-        }
-        _signingOut = true;
-        _signOutRequested = true;
-        // Same UI-thread turn as the check above: no new write may start while "logout" is awaited (a write that was refused
-        // explains the sign-out). The gate stays closed until this window closes, or until an abandoned sign-out reopens it.
-        _writeGate.Close();
-        // Stop polling before "logout"; results that arrive later are ignored (generation check).
-        SyncNotifications();
-        NotificationToasts.RemoveAllAsync();
-        // Revoke the server session first when the bridge is up; local sign-in data is cleared either way.
-        if (_bridge.State == BridgeConnectionState.Connected) await _bridge.RequestAsync("logout");
-        App.RequestSignOut();
-        _signingOut = false;
+        await _signOut.SignOutAsync();
     }
 
     /// <summary>The sign-out was abandoned (its login window was closed) and this window stays open: writes may start again.</summary>
-    internal void SignOutAbandoned()
-    {
-        _writeGate.Reopen();
-        _signOutRequested = false;
-        SyncNotifications();
-    }
-
-    /// <summary>
-    /// The session already ended on the server (a page's "Sign in again", or a password change that was applied or
-    /// unconfirmed), so this sign-out is never refused: when another write is still being sent, it runs as soon as the
-    /// write gate is released.
-    /// </summary>
-    private void SignOutWhenWritesFinish()
-    {
-        if (_writeGate.InFlight)
-        {
-            if (_signOutWhenGateFree) return;
-            _signOutWhenGateFree = true;
-            _writeGate.Released += SignOutWhenGateFree;
-            return;
-        }
-        _ = SignOutAsync();
-    }
-
-    private void SignOutWhenGateFree()
-    {
-        if (_writeGate.InFlight) return;
-        _writeGate.Released -= SignOutWhenGateFree;
-        _signOutWhenGateFree = false;
-        // Released is raised inside the finishing write's finally; sign out after it has returned, deferring again if
-        // another write took the gate in between.
-        if (!DispatcherQueue.TryEnqueue(SignOutWhenWritesFinish)) SignOutWhenWritesFinish();
-    }
-
-    private async Task ShowSignOutBlockedAsync()
-    {
-        if (RootGrid.XamlRoot is null) return;
-        var dialog = new ContentDialog
-        {
-            Title = L("Work_BusyTitle"),
-            Content = new TextBlock { Text = L("Shell_SignOutBlocked"), TextWrapping = TextWrapping.Wrap },
-            CloseButtonText = L("Close"),
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = RootGrid.XamlRoot,
-            RequestedTheme = RootGrid.ActualTheme,
-            Style = PageParts.Res("DefaultContentDialogStyle")
-        };
-        try
-        {
-            await dialog.ShowAsync();
-        }
-        catch
-        {
-            // Another dialog is already open; sign-out stays refused either way.
-        }
-    }
+    internal void SignOutAbandoned() => _signOut.SignOutAbandoned();
 
     private string LocalizedValue(string prefix, string value)
     {
