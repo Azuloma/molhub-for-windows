@@ -90,10 +90,6 @@ This package is unsigned and meant for development only. Windows SmartScreen may
 - Sign out revokes the server session through the bridge when it is connected, then clears the WebView2 cookies and site data. If the bridge is unavailable, only the local data is cleared and the server session expires on its own.
 - Commit history and Server maintenance are read-only; Administration has only the Members account writes (approve / reject / suspend, reset code) and its other changes stay on the web; Projects has the work reservation and publish writes only; Project management has the web's management writes (Discord server/channel discovery and App setup stay on the web); Profile settings has icon change/removal and password change. The bell shows project activity notifications with Windows toasts while the app is running; there is still no tray icon or background activity.
 
-## Versioning
-
-The `<Version>` element in `MolHub.Windows.csproj` defines the app version. `Package.appxmanifest` uses the matching four-part package version (for example `0.15.1.0`). See [VERSION.md](VERSION.md) for the policy and [CHANGELOG.md](CHANGELOG.md) for release notes.
-
 ## About the use of AI
 
 this project is vibecoded using Claude Code and Codex, but i still handle the actual testing, project structure, and overall organization myself.
